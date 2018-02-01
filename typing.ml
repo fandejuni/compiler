@@ -9,21 +9,24 @@ let string_of_type = function
   | Tstructp x -> "struct " ^ x.str_name ^ " *"
   | Tvoidstar  -> "void*"
   | Ttypenull  -> "typenull"
-
-let program p =
-    assert("Failure")
+type gamma_type = {
+    structs : structure list;
+    functions : decl_fun list
+}
+(* gamma:
+    * gamma.struct = structure list
+    * gamma.functions = decl_fun list
+    *)
 
 let gamma_structure_mem x gamma =
     let rec aux = function
     | [] -> false
-    | t::q -> t.str_name = x || aux x q
+    | t::q -> t.str_name = x || (aux q)
     in aux gamma.structs
 
 let check_type gamma = function
-    | Tint -> true
-    | Tstructp(ident) -> gamma_structure_mem ident gamma
-
-(* gamma: structure list *)
+    | Ptree.Tint -> true
+    | Ptree.Tstructp(ident) -> gamma_structure_mem ident.id gamma
 
 (* TODO: check si deux identifiants égaux *)
 let rec struct_bien_formee gamma = function
@@ -34,22 +37,49 @@ let rec check_arguments gamma = function
     | [] -> true
     | (typ, _)::q -> check_type gamma typ && check_arguments gamma q
 
-let rec check_statement gamma env stmt =
+
+let rec check_expr_sans_type gamma env (exp : Ptree.expr) = 
+    (* TODO *)
+    match exp.expr_node with
+    | Econst(i) -> true
+    | _ -> false  
+   (* | Eright of lvalue
+    | Eassign of lvalue * expr
+    | Eunop of unop * expr
+    | Ebinop of binop * expr * expr
+    | Ecall of ident * expr list
+    | Esizeof of ident
+    *)
+let rec check_expr gamma env (exp : Ptree.expr) typ = 
+    (* TODO *)
+    match exp.expr_node with
+    | Econst(zero) -> true
+    | Econst(i) -> false 
+    | _ -> false  
+   (* | Eright of lvalue
+    | Eassign of lvalue * expr
+    | Eunop of unop * expr
+    | Ebinop of binop * expr * expr
+    | Ecall of ident * expr list
+    | Esizeof of ident
+    *)
+
+let rec check_statement gamma env stmt ret_type =
 (* TODO *)
     match stmt.stmt_node with
-	| Sskip -> true
-	| Sexpr(expr) ->
-	| Sif of expr * stmt * stmt
-	| Swhile of expr * stmt
-	| Sblock of block
-	| Sreturn of expr
+	| Ptree.Sskip -> true
+	| Ptree.Sexpr(exp) -> check_expr_sans_type gamma env exp
+	| Ptree.Sif (exp, stmt1, stmt2) -> (check_expr gamma env Tint exp) && (check_statement gamma env stmt1 ret_type) && (check_statement gamma env stmt2 ret_type)
+	| Ptree.Swhile (exp,stmt1) -> (check_expr gamma env Tint exp) && (check_statement gamma env stmt1 ret_type)
+	| Ptree.Sblock (bloc)-> check_body gamma env bloc
+	| Ptree.Sreturn (exp) -> check_expr gamma env ret_typ exp
 
 
-let rec check_statements gamma env = function
+let rec check_statements gamma env ret_type = function
     | [] -> true
-    | t::q -> check_statement gamma env stmt && check_statements gamma env q
+    | t::q -> check_statement gamma env stmt ret_type && check_statements gamma env q
 
-let check_body gamma env (vars, stmts) =
+let check_body gamma env (vars, stmts) ret_type =
     if check_arguments gamma vars then
         let new_env = vars@env in
         check_statements gamma new_env stmts
@@ -58,7 +88,7 @@ let check_body gamma env (vars, stmts) =
 
 let add_fun gamma f =
     {
-        structs = gamma.structs;
+        structs = gamma.decl_structstructs;
         functions = f::gamma.functions
     }
 
@@ -72,13 +102,10 @@ let check_function decl_fun gamma =
     let b1 = check_type gamma decl_fun.typ in
     let b2 = check_arguments gamma decl_fun.fun_formals in
     let gamma_prime = add_fun gamma f in
-    let b3 = check_body gamma_prime fun_formals in
+    let b3 = check_body gamma_prime fun_formals decl_fun.typ in
     b1 && b2 && b3
     
-(* gamma:
-    * gamma.struct = structure list
-    * gamma.functions = decl_fun list
-    *)
+
 
 let jugement gamma env_function = function
     | Dstruct((ident, decl_list)) -> if (struct_bien_formee gamma decl_list) && (not (gamma_structure_mem ident gamma)) then
@@ -90,4 +117,10 @@ let jugement gamma env_function = function
     else
         raise Error("Fonction mal déclarée")
 
-
+let program p =
+    let gamma = {
+        structs = [];
+        functions = []
+    } and env = []
+    in 
+    jugement gamma env p

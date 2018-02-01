@@ -26,7 +26,7 @@
 
   let char_error s = raise (Lexical_error ("illegal character sequence: " ^ s))
 
-  let decode_char s = match Bytes.length s with
+  let decode_char s = match String.length s with
     | 1 -> Char.code s.[0]
     | 2 | 4 when s.[0] == '\\' ->
       begin match s.[1] with
@@ -34,7 +34,7 @@
         | 't' -> 9  (* Char.code '\t' *)
         | '\'' -> 39 (* Char.code '\'' *)
         | '\"' -> 34 (* Char.code '\"' *)
-        | 'x' -> Bytes.set s 0 '0'; int_of_string s
+        | 'x' -> int_of_string ("0x" ^ String.sub s 2 2)
         | _ -> char_error s
       end
     | _ -> char_error s
