@@ -42,9 +42,9 @@ let rec check_arguments gamma = function
 let rec get_type_env id = function
     |[] -> raise (Error "get_type failed")
     |(typ, ident)::q when (id=ident) -> typ
-    | _::q -> get_type id q
+    | _::q -> get_type_env id q
 
-let rec get_type gamma env (exp : Ptree.expr) = 
+let rec get_type_expr gamma env (exp : Ptree.expr) = 
     (* TODO *)
     match exp.expr_node with
     | Econst(0l) -> Ttypenull
@@ -55,20 +55,28 @@ let rec get_type gamma env (exp : Ptree.expr) =
         |Larrow (exp1, id) -> 
     | Eassign (lvalue,exp)-> false
     | Eunop (unop,exp) -> false
-    | Ebinop (binop, exp1 ,exp2) ->false
+    | Ebinop (binop, exp1 ,exp2) ->
+        begin
+            let t1 = get_type_expr gamma env exp1 in
+            let t2 = get_type_expr gamma env exp2 in
+            match binop with
+            | Beq | Bneq ->
+                if t1 = t2 || ((t1 = Ttypenull || t1 = Tint) && (t2 = Ttypenull || t2 = Tint))
+                then Tint
+                else raise(Error("Error with = or !="))
+            | _ -> ((t1 = Ttypenull || t1 = Tint) && (t2 = Ttypenull || t2 = Tint))
+        end
     | Ecall (ident,expl)->false
     | Esizeof (ident) ->false
 
-
 let rec check_statement gamma env (stmt: Ptree.stmt) ret_type =
-(* TODO *)
     match stmt.stmt_node with
 	| Ptree.Sskip -> true
-	| Ptree.Sexpr(exp) -> check_expr_sans_type gamma env exp
-	| Ptree.Sif (exp, stmt1, stmt2) -> (check_expr gamma env exp Tint) && (check_statement gamma env stmt1 ret_type) && (check_statement gamma env stmt2 ret_type)
-	| Ptree.Swhile (exp,stmt1) -> (check_expr gamma env exp Tint) && (check_statement gamma env stmt1 ret_type)
+	| Ptree.Sexpr(exp) -> get_type_expr gamma env exp
+	| Ptree.Sif (exp, stmt1, stmt2) -> (get_type_expr gamma env exp = Tint) && (check_statement gamma env stmt1 ret_type) && (check_statement gamma env stmt2 ret_type)
+	| Ptree.Swhile (exp,stmt1) -> (get_type_expr gamma env exp = Tint) && (check_statement gamma env stmt1 ret_type)
 	| Ptree.Sblock (bloc)-> check_body gamma env bloc ret_type
-	| Ptree.Sreturn (exp) -> check_expr gamma env exp ret_type 
+	| Ptree.Sreturn (exp) -> get_type_expr gamma env exp = ret_type
 and check_statements gamma env ret_type = function
     | [] -> true
     | t::q -> check_statement gamma env t ret_type && check_statements gamma env ret_type q

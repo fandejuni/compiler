@@ -64,5 +64,3 @@ and decl_fun = {
 type file = {
   funs: decl_fun list;
 }
-
-

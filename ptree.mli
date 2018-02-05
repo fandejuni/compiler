@@ -64,5 +64,3 @@ type decl =
   | Dfun of decl_fun
 
 type file = decl list
-
-
