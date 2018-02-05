@@ -133,26 +133,27 @@ let rec convert_type gamma (typ: Ptree.typ) : Ttree.typ =
     end
 
 
-let get_type_expr_node gamma expr_node : typ =
+let convert_expr gamma expr : Ttree.expr =
     raise(Error("Not cool"))
 
 let convert gamma p =
-    (*let convert_expr = funct *)
-    let convert_stmt_node = function
+    let rec convert_stmt_node = function
 		| Ptree.Sskip -> Sskip
-		| Ptree.Sexpr(expr) -> Sskip
-		| Ptree.Sif(expr, stmt1, stmt2) -> Sskip
-		| Ptree.Swhile(expr, stmt) -> Sskip
-		| Ptree.Sblock(block) -> Sskip
-		| Ptree.Sreturn(expr) -> Sskip
-    in
-    let convert_stmt (stmt: Ptree.stmt) =
+        | Ptree.Sexpr(expr) -> Sexpr(convert_expr gamma expr)
+		| Ptree.Sif(expr, stmt1, stmt2) -> Sif(
+            convert_expr gamma expr,
+            convert_stmt stmt1,
+            convert_stmt stmt2)
+		| Ptree.Swhile(expr, stmt) -> Swhile(
+            convert_expr gamma expr,
+            convert_stmt stmt)
+		| Ptree.Sblock(block) -> Sblock(convert_block block)
+		| Ptree.Sreturn(expr) -> Sreturn(convert_expr gamma expr)
+    and convert_stmt (stmt: Ptree.stmt) =
         convert_stmt_node stmt.stmt_node
-    in
-    let convert_var ((typ, ident): Ptree.decl_var) =
+    and convert_var ((typ, ident): Ptree.decl_var) =
         (convert_type gamma typ, ident.id)
-    in
-    let convert_block ((decl_var_list, stmt_list): Ptree.block) =
+    and convert_block ((decl_var_list, stmt_list): Ptree.block) =
         (List.map convert_var decl_var_list), (List.map convert_stmt stmt_list)
     in
     let convert_fun (f: Ptree.decl_fun) =
@@ -178,4 +179,4 @@ let program p =
         structs = [];
         functions = []
     }
-    in convert (aux gamma_vide p) p
+    in {funs = convert (aux gamma_vide p) p}
