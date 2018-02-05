@@ -8,19 +8,20 @@ let string_of_type = function
   | Tstructp x -> "struct " ^ x.str_name ^ " *"
   | Tvoidstar  -> "void*"
   | Ttypenull  -> "typenull"
+
 type gamma_type = {
-    structs : structure list;
-    functions : decl_fun list
+    structs : Ptree.decl_struct list;
+    functions : Ptree.decl_fun list
 }
 (* gamma:
     * gamma.struct = structure list
     * gamma.functions = decl_fun list
     *)
 
-let gamma_structure_mem x gamma =
+let gamma_structure_mem x (gamma: gamma_type) =
     let rec aux = function
     | [] -> false
-    | t::q -> t.str_name = x || (aux q)
+    | (name, _)::q -> name.id = x || (aux q)
     in aux gamma.structs
 
 let check_type gamma = function
@@ -82,7 +83,7 @@ and check_body gamma env (vars, stmts) ret_type =
     else
         raise(Error("Déclaration de variables illégale"))
 
-let add_fun gamma f =
+let add_fun gamma (f: Ptree.decl_fun) =
     {
         structs = gamma.structs;
         functions = f::gamma.functions
@@ -94,14 +95,12 @@ let add_struct gamma s =
         functions = gamma.functions
     }
 
-let check_function decl_fun gamma =
-    let b1 = check_type gamma decl_fun.typ in
+let check_function (decl_fun: Ptree.decl_fun) gamma =
+    let b1 = check_type gamma decl_fun.fun_typ in
     let b2 = check_arguments gamma decl_fun.fun_formals in
-    let gamma_prime = add_fun gamma f in
+    let gamma_prime = add_fun gamma decl_fun in
     let b3 = check_body gamma_prime fun_formals decl_fun.typ in
     b1 && b2 && b3
-    
-
 
 let jugement gamma env_function = function
     | Dstruct((ident, decl_list)) -> if (struct_bien_formee gamma decl_list) && (not (gamma_structure_mem ident gamma)) then
