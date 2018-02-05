@@ -24,7 +24,14 @@ let gamma_structure_mem x (gamma: gamma_type) =
     | [] -> false
     | (name, _)::q -> name.id = x || (aux q)
     in aux gamma.structs
-      
+
+let gamma_structure_find x (gamma: gamma_type) =
+   let rec aux (l: Ptree.decl_struct list) =
+    match l with
+    | [] -> raise (Error "not an existing structure")
+    | (name, dec_varl)::q -> if (name.id = x ) then dec_varl else (aux q)
+    in aux gamma.structs
+
 let check_type gamma = function
     | Ptree.Tint -> true
     | Ptree.Tstructp(ident) -> gamma_structure_mem ident.id gamma
@@ -38,23 +45,43 @@ let rec check_arguments gamma = function
     | [] -> true
     | (typ, _)::q -> check_type gamma typ && check_arguments gamma q
 
+let rec convert_type gamma (typ: Ptree.typ) : Ttree.typ =
+    let rec fill struc = function
+        |[] -> ()
+        |((typ:Ptree.typ) , (ident:Ptree.ident))::q -> begin
+            Hashtbl.add (struc.str_fields) ident.id {field_name = ident.id; field_typ = (convert_type gamma typ)};
+            fill struc q
+        end
+    in match typ with 
+    |Tint -> Tint
+    |Tstructp ident -> begin 
+        let struc = {
+            str_name = ident.id;
+            str_fields = Hashtbl.create 17
+        } in fill struc (gamma_structure_find ident.id gamma); Tstructp struc
+    end
 
 let rec get_type_env id = function
     |[] -> raise (Error "get_type failed")
     |(typ, ident)::q when (id=ident) -> typ
-    | _::q -> get_type id q
+    | _::q -> get_type_env id q
 
-let rec get_type gamma env (exp : Ptree.expr) = 
+let rec get_type_expr gamma env (exp : Ptree.expr) = 
     (* TODO *)
     match exp.expr_node with
     | Econst(0l) -> Ttypenull
     | Econst(i) -> Tint
     | Eright (lvalue)-> begin
         match lvalue with 
-        |Lident(id) -> ((get_type id env) = typ) 
-        |Larrow (exp1, id) -> 
-    | Eassign (lvalue,exp)-> false
-    | Eunop (unop,exp) -> false
+        |Lident(id) -> convert_type gamma (get_type_env id env)
+        |Larrow (exp1, id) -> begin 
+            match get_type_expr gamma env exp1 with
+            |Tstructp(ident) -> convert_type gamma (get_type_env id (gamma_structure_find ident.str_name gamma))
+            |_ -> raise (Error "assignement of a non structure")
+        end
+    end
+    | Eassign (lvalue,exp1)-> if ((get_type_expr gamma env {expr_node = Eright(lvalue); expr_loc= exp.expr_loc}) = (get_type_expr gamma env exp1)) then (get_type_expr gamma env exp1) else raise (Error "assignment types not matching"); 
+    | Eunop (unop,exp1) -> false
     | Ebinop (binop, exp1 ,exp2) ->false
     | Ecall (ident,expl)->false
     | Esizeof (ident) ->false
@@ -85,7 +112,12 @@ let add_fun gamma (f: Ptree.decl_fun) =
         functions = f::gamma.functions
     }
 
-let add_struct gamma s =
+let add_struct gamma s =let gamma_structure_find x (gamma: gamma_type) =
+let rec aux (l: Ptree.decl_struct list) =
+ match l with
+ | [] -> raise (Error "not an existing structure")
+ | (name, dec_varl)::q -> if (name.id = x ) then dec_varl else (aux q)
+ in aux gamma.structs
     {
         structs = s::gamma.structs;
         functions = gamma.functions
@@ -108,29 +140,8 @@ let jugement gamma = function
     else
         raise(Error("Fonction mal déclarée"))
 
-let gamma_structure_find x (gamma: gamma_type) =
-   let rec aux (l: Ptree.decl_struct list) =
-    match l with
-    | [] -> raise (Error "not an existing structure")
-    | (name, dec_varl)::q -> if (name.id = x ) then dec_varl else (aux q)
-    in aux gamma.structs
 
 
-let rec convert_type gamma (typ: Ptree.typ) : Ttree.typ =
-    let rec fill struc = function
-        |[] -> ()
-        |((typ:Ptree.typ) , (ident:Ptree.ident))::q -> begin
-            Hashtbl.add (struc.str_fields) ident.id {field_name = ident.id; field_typ = (convert_type gamma typ)};
-            fill struc q
-        end
-    in match typ with 
-    |Tint -> Tint
-    |Tstructp ident -> begin 
-        let struc = {
-            str_name = ident.id;
-            str_fields = Hashtbl.create 17
-        } in fill struc (gamma_structure_find ident.id gamma); Tstructp struc
-    end
 
 
 let convert_expr gamma expr : Ttree.expr =
