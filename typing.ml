@@ -1,4 +1,3 @@
-
 open Ttree
 
 (* utiliser cette exception pour signaler une erreur de typage *)
@@ -53,7 +52,7 @@ let rec check_expr_sans_type gamma env (exp : Ptree.expr) =
 let rec check_expr gamma env (exp : Ptree.expr) typ = 
     (* TODO *)
     match exp.expr_node with
-    | Econst(zero) -> true
+    | Econst(0l) -> true
     | Econst(i) -> false 
     | _ -> false  
    (* | Eright of lvalue
@@ -64,27 +63,26 @@ let rec check_expr gamma env (exp : Ptree.expr) typ =
     | Esizeof of ident
     *)
 
-let rec check_statement gamma env stmt ret_type =
-(* TODO *)
-    match stmt.stmt_node with
-	| Ptree.Sskip -> true
-	| Ptree.Sexpr(exp) -> check_expr_sans_type gamma env exp
-	| Ptree.Sif (exp, stmt1, stmt2) -> (check_expr gamma env Tint exp) && (check_statement gamma env stmt1 ret_type) && (check_statement gamma env stmt2 ret_type)
-	| Ptree.Swhile (exp,stmt1) -> (check_expr gamma env Tint exp) && (check_statement gamma env stmt1 ret_type)
-	| Ptree.Sblock (bloc)-> check_body gamma env bloc
-	| Ptree.Sreturn (exp) -> check_expr gamma env ret_typ exp
-
-
-let rec check_statements gamma env ret_type = function
-    | [] -> true
-    | t::q -> check_statement gamma env stmt ret_type && check_statements gamma env q
-
 let check_body gamma env (vars, stmts) ret_type =
     if check_arguments gamma vars then
         let new_env = vars@env in
         check_statements gamma new_env stmts
     else
         raise Error("Déclaration de variables illégale")
+
+let rec check_statements gamma env ret_type = function
+    | [] -> true
+    | t::q -> check_statement gamma env stmt ret_type && check_statements gamma env q
+
+let rec check_statement gamma env stmt ret_type =
+(* TODO *)
+    match stmt.stmt_node with
+	| Ptree.Sskip -> true
+	| Ptree.Sexpr(exp) -> check_expr_sans_type gamma env exp
+	| Ptree.Sif (exp, stmt1, stmt2) -> (check_expr gamma env exp Tint) && (check_statement gamma env stmt1 ret_type) && (check_statement gamma env stmt2 ret_type)
+	| Ptree.Swhile (exp,stmt1) -> (check_expr gamma env exp Tint) && (check_statement gamma env stmt1 ret_type)
+	| Ptree.Sblock (bloc)-> check_body gamma env bloc
+	| Ptree.Sreturn (exp) -> check_expr gamma env ret_typ exp
 
 let add_fun gamma f =
     {
