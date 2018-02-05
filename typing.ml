@@ -24,7 +24,7 @@ let gamma_structure_mem x (gamma: gamma_type) =
     | [] -> false
     | (name, _)::q -> name.id = x || (aux q)
     in aux gamma.structs
-
+      
 let check_type gamma = function
     | Ptree.Tint -> true
     | Ptree.Tstructp(ident) -> gamma_structure_mem ident.id gamma
@@ -55,9 +55,8 @@ let rec check_expr gamma env (exp : Ptree.expr) typ =
     (* TODO *)
     match exp.expr_node with
     | Econst(0l) -> true
-    | Econst(i) -> false 
-    | _ -> false  
-   (* | Eright of lvalue
+    | Econst(i) -> (typ=Ptree.Tint) 
+    | Eright of lvalue
     | Eassign of lvalue * expr
     | Eunop of unop * expr
     | Ebinop of binop * expr * expr
@@ -113,8 +112,30 @@ let jugement gamma = function
     else
         raise(Error("Fonction mal déclarée"))
 
-let get_type gamma (typ: Ptree.typ) : Ttree.typ =
-    raise(Error("Not cool"))
+let gamma_structure_find x (gamma: gamma_type) =
+   let rec aux (l: Ptree.decl_struct list) =
+    match l with
+    | [] -> raise (Error "not an existing structure")
+    | (name, dec_varl)::q -> if (name.id = x ) then dec_varl else (aux q)
+    in aux gamma.structs
+
+
+let rec convert_type gamma (typ: Ptree.typ) : Ttree.typ =
+    let rec fill struc = function
+        |[] -> ()
+        |((typ:Ptree.typ) , (ident:Ptree.ident))::q -> begin
+            Hashtbl.add (struc.str_fields) ident.id {field_name = ident.id; field_typ = (convert_type gamma typ)};
+            fill struc q
+        end
+    in match typ with 
+    |Tint -> Tint
+    |Tstructp ident -> begin 
+        let struc = {
+            str_name = ident.id;
+            str_fields = Hashtbl.create 17
+        } in fill struc (gamma_structure_find ident.id gamma); Tstructp struc
+    end
+
 
 let rec convert_p gamma = function
     | Dstruct(decl_struct) -> 

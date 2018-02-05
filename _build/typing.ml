@@ -113,8 +113,10 @@ let jugement gamma = function
     else
         raise(Error("Fonction mal déclarée"))
 
+let rec convert_p 
+
+
 let program p =
-    (* TODO *)
    let rec aux gamma = function
     | [] -> gamma
     | t::q -> aux (jugement gamma t) q
@@ -122,4 +124,4 @@ let program p =
         structs = [];
         functions = []
     }
-    in aux gamma_vide p
+    in let gamma = aux gamma_vide p in
