@@ -113,8 +113,48 @@ let jugement gamma = function
     else
         raise(Error("Fonction mal déclarée"))
 
+let convert_type gamma (typ: Ptree.typ) : Ttree.typ =
+    raise(Error("Not cool"))
+
+let convert_expr gamma expr : Ttree.expr =
+    raise(Error("Not cool"))
+
+let convert gamma p =
+    let rec convert_stmt_node = function
+		| Ptree.Sskip -> Sskip
+        | Ptree.Sexpr(expr) -> Sexpr(convert_expr gamma expr)
+		| Ptree.Sif(expr, stmt1, stmt2) -> Sif(
+            convert_expr gamma expr,
+            convert_stmt stmt1,
+            convert_stmt stmt2)
+		| Ptree.Swhile(expr, stmt) -> Swhile(
+            convert_expr gamma expr,
+            convert_stmt stmt)
+		| Ptree.Sblock(block) -> Sblock(convert_block block)
+		| Ptree.Sreturn(expr) -> Sreturn(convert_expr gamma expr)
+    and convert_stmt (stmt: Ptree.stmt) =
+        convert_stmt_node stmt.stmt_node
+    and convert_var ((typ, ident): Ptree.decl_var) =
+        (convert_type gamma typ, ident.id)
+    and convert_block ((decl_var_list, stmt_list): Ptree.block) =
+        (List.map convert_var decl_var_list), (List.map convert_stmt stmt_list)
+    in
+    let convert_fun (f: Ptree.decl_fun) =
+    {
+        fun_typ = convert_type gamma f.fun_typ;
+        fun_name = f.fun_name.id;
+        fun_formals = List.map convert_var f.fun_formals;
+        fun_body = convert_block f.fun_body
+    }
+    in
+    let rec convert_p = function
+    | [] -> []
+    | (Ptree.Dfun(decl_fun)::q) -> (convert_fun decl_fun)::(convert_p q)
+    | t::q -> convert_p q
+    in
+    convert_p p
+
 let program p =
-    (* TODO *)
    let rec aux gamma = function
     | [] -> gamma
     | t::q -> aux (jugement gamma t) q
@@ -122,4 +162,4 @@ let program p =
         structs = [];
         functions = []
     }
-    in aux gamma_vide p
+    in {funs = convert (aux gamma_vide p) p}
