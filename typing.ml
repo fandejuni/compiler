@@ -63,22 +63,22 @@ let rec check_expr gamma env (exp : Ptree.expr) typ =
     | Esizeof of ident
     *)
 
-let rec check_statement gamma env stmt ret_type =
+let rec check_statement gamma env v_stmt ret_type =
 (* TODO *)
-    match stmt.stmt_node with
+    match v_stmt.stmt_node with
 	| Ptree.Sskip -> true
 	| Ptree.Sexpr(exp) -> check_expr_sans_type gamma env exp
 	| Ptree.Sif (exp, stmt1, stmt2) -> (check_expr gamma env exp Tint) && (check_statement gamma env stmt1 ret_type) && (check_statement gamma env stmt2 ret_type)
 	| Ptree.Swhile (exp,stmt1) -> (check_expr gamma env exp Tint) && (check_statement gamma env stmt1 ret_type)
-	| Ptree.Sblock (bloc)-> check_body gamma env bloc
-	| Ptree.Sreturn (exp) -> check_expr gamma env ret_typ exp
+	| Ptree.Sblock (bloc)-> check_body gamma env bloc ret_type
+	| Ptree.Sreturn (exp) -> check_expr gamma env ret_type exp
 and check_statements gamma env ret_type = function
     | [] -> true
-    | t::q -> check_statement gamma env stmt ret_type && check_statements gamma env q
+    | t::q -> check_statement gamma env stmt ret_type && check_statements gamma env ret_type q
 and check_body gamma env (vars, stmts) ret_type =
     if check_arguments gamma vars then
         let new_env = vars@env in
-        check_statements gamma new_env stmts
+        check_statements gamma new_env ret_type stmts
     else
         raise Error("Déclaration de variables illégale")
 
