@@ -103,22 +103,25 @@ let check_function (decl_fun: Ptree.decl_fun) gamma =
     let b3 = check_body gamma_prime decl_fun.fun_formals decl_fun.fun_body decl_fun.fun_typ in
     b1 && b2 && b3
 
-let jugement gamma env_function = function
+let jugement gamma = function
     | Ptree.Dstruct((ident, decl_list)) -> if (struct_bien_formee gamma decl_list) && (not (gamma_structure_mem ident.id gamma)) then
         add_struct gamma (ident, decl_list)
     else
         raise(Error("Structure mal formée ou type existant"))
-    | Dfun(decl_fun) -> if (check_function decl_fun gamma) then
+    | Ptree.Dfun(decl_fun) -> if (check_function decl_fun gamma) then
         add_fun gamma decl_fun
     else
         raise(Error("Fonction mal déclarée"))
 
+let rec convert_p 
+
+
 let program p =
-    (* TODO *)
-    let gamma = {
+   let rec aux gamma = function
+    | [] -> gamma
+    | t::q -> aux (jugement gamma t) q
+    in let gamma_vide = {
         structs = [];
         functions = []
-    } and env = []
-    in 
-    ignore(jugement gamma env (List.hd p));
-    {funs = []}
+    }
+    in let gamma = aux gamma_vide p in

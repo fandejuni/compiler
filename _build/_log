@@ -33,11 +33,14 @@
 /home/thibault/.opam/4.06.0/bin/ocamldep.opt -modules typing.ml > typing.ml.depends
 # Target: typing.cmx, tags: { compile, extension:cmx, extension:ml, file:typing.cmx, file:typing.ml, implem, native, ocaml, quiet }
 /home/thibault/.opam/4.06.0/bin/ocamlopt.opt -c -o typing.cmx typing.ml
-# Target: main.cmx, tags: { compile, extension:cmx, extension:ml, file:main.cmx, file:main.ml, implem, native, ocaml, quiet }
-/home/thibault/.opam/4.06.0/bin/ocamlopt.opt -c -o main.cmx main.ml
-+ /home/thibault/.opam/4.06.0/bin/ocamlopt.opt -c -o main.cmx main.ml
-File "main.ml", line 45, characters 8-9:
-Warning 26: unused variable p.
-# Target: main.native, tags: { dont_link_with, extension:native, file:main.native, link, native, ocaml, program, quiet }
-/home/thibault/.opam/4.06.0/bin/ocamlopt.opt parser.cmx lexer.cmx typing.cmx main.cmx -o main.native
-# Compilation successful.
++ /home/thibault/.opam/4.06.0/bin/ocamlopt.opt -c -o typing.cmx typing.ml
+File "typing.ml", line 1:
+Error: The implementation typing.ml does not match the interface typing.cmi:
+       Values do not match:
+         val program : Ptree.decl list -> gamma_type
+       is not included in
+         val program : Ptree.file -> Ttree.file
+       File "typing.mli", line 4, characters 0-37: Expected declaration
+       File "typing.ml", line 116, characters 4-11: Actual declaration
+Command exited with code 2.
+# Compilation unsuccessful.
