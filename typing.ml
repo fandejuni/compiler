@@ -19,7 +19,8 @@ type gamma_type = {
     *)
 
 let gamma_structure_mem x (gamma: gamma_type) =
-    let rec aux = function
+    let rec aux (l: Ptree.decl_struct list) =
+    match l with
     | [] -> false
     | (name, _)::q -> name.id = x || (aux q)
     in aux gamma.structs
@@ -72,11 +73,11 @@ let rec check_statement gamma env (stmt: Ptree.stmt) ret_type =
 	| Ptree.Sif (exp, stmt1, stmt2) -> (check_expr gamma env exp Tint) && (check_statement gamma env stmt1 ret_type) && (check_statement gamma env stmt2 ret_type)
 	| Ptree.Swhile (exp,stmt1) -> (check_expr gamma env exp Tint) && (check_statement gamma env stmt1 ret_type)
 	| Ptree.Sblock (bloc)-> check_body gamma env bloc ret_type
-	| Ptree.Sreturn (exp) -> check_expr gamma env ret_type exp
+	| Ptree.Sreturn (exp) -> check_expr gamma env exp ret_type 
 and check_statements gamma env ret_type = function
     | [] -> true
     | t::q -> check_statement gamma env t ret_type && check_statements gamma env ret_type q
-and check_body gamma env (vars, stmts) ret_type =
+and check_body gamma env (vars, stmts) (ret_type: Ptree.typ) =
     if check_arguments gamma vars then
         let new_env = vars@env in
         check_statements gamma new_env ret_type stmts
@@ -99,23 +100,25 @@ let check_function (decl_fun: Ptree.decl_fun) gamma =
     let b1 = check_type gamma decl_fun.fun_typ in
     let b2 = check_arguments gamma decl_fun.fun_formals in
     let gamma_prime = add_fun gamma decl_fun in
-    let b3 = check_body gamma_prime fun_formals decl_fun.typ in
+    let b3 = check_body gamma_prime decl_fun.fun_formals decl_fun.fun_body decl_fun.fun_typ in
     b1 && b2 && b3
 
 let jugement gamma env_function = function
-    | Dstruct((ident, decl_list)) -> if (struct_bien_formee gamma decl_list) && (not (gamma_structure_mem ident gamma)) then
+    | Ptree.Dstruct((ident, decl_list)) -> if (struct_bien_formee gamma decl_list) && (not (gamma_structure_mem ident.id gamma)) then
         add_struct gamma (ident, decl_list)
     else
-        raise Error("Structure mal formée ou type existant")
+        raise(Error("Structure mal formée ou type existant"))
     | Dfun(decl_fun) -> if (check_function decl_fun gamma) then
         add_fun gamma decl_fun
     else
-        raise Error("Fonction mal déclarée")
+        raise(Error("Fonction mal déclarée"))
 
 let program p =
+    (* TODO *)
     let gamma = {
         structs = [];
         functions = []
     } and env = []
     in 
-    jugement gamma env p
+    ignore(jugement gamma env (List.hd p));
+    {funs = []}
