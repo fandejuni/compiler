@@ -39,30 +39,26 @@ let rec check_arguments gamma = function
     | (typ, _)::q -> check_type gamma typ && check_arguments gamma q
 
 
-let rec check_expr_sans_type gamma env (exp : Ptree.expr) = 
+let rec get_type_env id = function
+    |[] -> raise (Error "get_type failed")
+    |(typ, ident)::q when (id=ident) -> typ
+    | _::q -> get_type id q
+
+let rec get_type gamma env (exp : Ptree.expr) = 
     (* TODO *)
     match exp.expr_node with
-    | Econst(i) -> true
-    | _ -> false  
-   (* | Eright of lvalue
-    | Eassign of lvalue * expr
-    | Eunop of unop * expr
-    | Ebinop of binop * expr * expr
-    | Ecall of ident * expr list
-    | Esizeof of ident
-    *)
-let rec check_expr gamma env (exp : Ptree.expr) typ = 
-    (* TODO *)
-    match exp.expr_node with
-    | Econst(0l) -> true
-    | Econst(i) -> (typ=Ptree.Tint) 
-    | Eright of lvalue
-    | Eassign of lvalue * expr
-    | Eunop of unop * expr
-    | Ebinop of binop * expr * expr
-    | Ecall of ident * expr list
-    | Esizeof of ident
-    *)
+    | Econst(0l) -> Ttypenull
+    | Econst(i) -> Tint
+    | Eright (lvalue)-> begin
+        match lvalue with 
+        |Lident(id) -> ((get_type id env) = typ) 
+        |Larrow (exp1, id) -> 
+    | Eassign (lvalue,exp)-> false
+    | Eunop (unop,exp) -> false
+    | Ebinop (binop, exp1 ,exp2) ->false
+    | Ecall (ident,expl)->false
+    | Esizeof (ident) ->false
+
 
 let rec check_statement gamma env (stmt: Ptree.stmt) ret_type =
 (* TODO *)
@@ -137,10 +133,42 @@ let rec convert_type gamma (typ: Ptree.typ) : Ttree.typ =
     end
 
 
-let rec convert_p gamma = function
-    | Dstruct(decl_struct) -> 
+let get_type_expr_node gamma expr_node : typ =
+    raise(Error("Not cool"))
 
-
+let convert gamma p =
+    (*let convert_expr = funct *)
+    let convert_stmt_node = function
+		| Ptree.Sskip -> Sskip
+		| Ptree.Sexpr(expr) -> Sskip
+		| Ptree.Sif(expr, stmt1, stmt2) -> Sskip
+		| Ptree.Swhile(expr, stmt) -> Sskip
+		| Ptree.Sblock(block) -> Sskip
+		| Ptree.Sreturn(expr) -> Sskip
+    in
+    let convert_stmt (stmt: Ptree.stmt) =
+        convert_stmt_node stmt.stmt_node
+    in
+    let convert_var ((typ, ident): Ptree.decl_var) =
+        (convert_type gamma typ, ident.id)
+    in
+    let convert_block ((decl_var_list, stmt_list): Ptree.block) =
+        (List.map convert_var decl_var_list), (List.map convert_stmt stmt_list)
+    in
+    let convert_fun (f: Ptree.decl_fun) =
+    {
+        fun_typ = convert_type gamma f.fun_typ;
+        fun_name = f.fun_name.id;
+        fun_formals = List.map convert_var f.fun_formals;
+        fun_body = convert_block f.fun_body
+    }
+    in
+    let rec convert_p = function
+    | [] -> []
+    | (Ptree.Dfun(decl_fun)::q) -> (convert_fun decl_fun)::(convert_p q)
+    | t::q -> convert_p q
+    in
+    convert_p p
 
 let program p =
    let rec aux gamma = function
@@ -150,4 +178,4 @@ let program p =
         structs = [];
         functions = []
     }
-    in let gamma = aux gamma_vide p in
+    in convert (aux gamma_vide p) p
