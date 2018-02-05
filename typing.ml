@@ -113,7 +113,12 @@ let jugement gamma = function
     else
         raise(Error("Fonction mal déclarée"))
 
-let rec convert_p 
+let get_type gamma (typ: Ptree.typ) : Ttree.typ =
+    raise(Error("Not cool"))
+
+let rec convert_p gamma = function
+    | Dstruct(decl_struct) -> 
+
 
 
 let program p =
