@@ -10,262 +10,177 @@ let string_of_type = function
   | Ttypenull  -> "typenull"
 
 type gamma_type = {
-    structs : Ptree.decl_struct list;
-    functions : Ptree.decl_fun list
+    variables : decl_var list;
+    structs : structure list;
+    functions : decl_fun list;
 }
-(* gamma:
-    * gamma.struct = structure list
-    * gamma.functions = decl_fun list
-    *)
 
-let gamma_structure_mem x (gamma: gamma_type) =
-    let rec aux (l: Ptree.decl_struct list) =
-    match l with
-    | [] -> false
-    | (name, _)::q -> name.id = x || (aux q)
+let add_var gamma decl_var =
+{
+    variables = decl_var::gamma.variables;
+    structs = gamma.structs;
+    functions = gamma.functions;
+}
+
+let add_structure gamma structure =
+{
+    variables = gamma.variables;
+    structs = structure::gamma.structs;
+    functions = gamma.functions;
+}
+
+let add_fun gamma decl_fun =
+{
+    variables = gamma.variables;
+    structs = gamma.structs;
+    functions = decl_fun::gamma.functions;
+}
+
+let add_var gamma decl_var =
+{
+    variables = decl_var::gamma.variables;
+    structs = gamma.structs;
+    functions = gamma.functions;
+}
+
+let create_expr typ expr_node =
+{
+	expr_typ = typ;
+	expr_node = expr_node;
+}
+
+let compatible t1 t2 =
+    match (t1, t2) with
+    | (Ttypenull, _) -> true
+    | (_, Ttypenull) -> true
+    | (Tvoidstar, Tstructp(_)) -> true
+    | (Tstructp(_), Tvoidstar) -> true
+    | _ -> t1 = t2
+
+let get_structure gamma str =
+    let rec aux = function
+    | [] -> raise(Error("Unknown structure"))
+    | t::q -> if t.str_name = str then t else aux q
     in aux gamma.structs
 
-let gamma_structure_find x (gamma: gamma_type) =
-   let rec aux (l: Ptree.decl_struct list) =
-    match l with
-    | [] -> raise (Error "not an existing structure")
-    | (name, dec_varl)::q -> if (name.id = x ) then dec_varl else (aux q)
-    in aux gamma.structs
-
-let check_type gamma = function
-    | Ptree.Tint -> true
-    | Ptree.Tstructp(ident) -> gamma_structure_mem ident.id gamma
-
-let unique l =
-    let rec aux accu = function
-    | [] -> true
-    | t::q -> if List.mem t accu then false else aux (t::accu) q
-    in aux [] l
-
-let struct_bien_formee gamma structure =
+let get_typ_var gamma str =
     let rec aux = function
-    | [] -> true
-    | (typ, ident)::q -> check_type gamma typ && aux q
-    in
-    aux structure && unique (List.map fst structure)
+    | [] -> raise(Error("Unknown variable"))
+    | (typ, ident)::q -> if ident = str then typ else aux q
+    in aux gamma.variables
 
-let check_arguments gamma args =
+let get_field expr ident =
+    match expr.expr_typ with
+    | Tstructp(structure) -> Hashtbl.find (structure.str_fields) ident 
+    | _ -> raise(Error("Not a structure"))
+
+let get_fun gamma str =
     let rec aux = function
-    | [] -> true
-    | (typ, _)::q -> check_type gamma typ && aux q
-    in aux args && unique (List.map (fun (x: Ptree.decl_var) -> (snd x).id) args)
+    | [] -> raise(Error("Unknown function"))
+    | f::q -> if f.fun_name = str then f else aux q
+    in aux gamma.functions
 
-let rec convert_type gamma (typ: Ptree.typ) : Ttree.typ =
-    let rec fill struc = function
-        |[] -> ()
-        |((typ:Ptree.typ) , (ident:Ptree.ident))::q -> begin
-            Hashtbl.add (struc.str_fields) ident.id {field_name = ident.id; field_typ = (convert_type gamma typ)};
-            fill struc q
-        end
-    in match typ with 
-    |Tint -> Tint
-    |Tstructp ident -> begin 
-        let struc = {
-            str_name = ident.id;
-            str_fields = Hashtbl.create 17
-        } in fill struc (gamma_structure_find ident.id gamma); Tstructp struc
-    end
-
-let rec get_type_env id = function
-    |[] -> raise (Error "get_type failed")
-    |(typ, ident)::q when (id=ident) -> typ
-    | _::q -> get_type_env id q
-
-let rec find_function (ident: Ptree.ident) gamma =
-    let rec aux (l: Ptree.decl_fun list) =
-    match l with
-    | [] -> raise(Error("This function doesn't exist"))
-    | t::q -> if t.fun_name.id = ident.id then t else aux q
-    in
-    aux gamma.functions
-
-let rec check_function_bis gamma env (f: Ptree.decl_fun) l =
-    (* TODO *)
-    let rec aux (l_args: Ptree.decl_var list) l_exps =
-    match (l_args, l_exps) with
-    | ([], []) -> true
-    | ((typ1, ident1)::q, exp::t) -> let typ = get_type_expr gamma env exp in (typ = (convert_type gamma typ1)) && aux q t
-    | _ -> false
-    in
-    aux f.fun_formals l
-and get_type_expr gamma env (exp : Ptree.expr) = 
-    (* TODO *)
-    match exp.expr_node with
-    | Econst(0l) -> Ttypenull
-    | Econst(i) -> Tint
-    | Eright (lvalue)-> begin
-        match lvalue with 
-        |Lident(id) -> convert_type gamma (get_type_env id env)
-        |Larrow (exp1, id) -> begin 
-            match get_type_expr gamma env exp1 with
-            |Tstructp(ident) -> convert_type gamma (get_type_env id (gamma_structure_find ident.str_name gamma))
-            |_ -> raise (Error "assignement of a non structure")
-        end
-    end
-    | Eassign (lvalue,exp1)-> if ((get_type_expr gamma env {expr_node = Eright(lvalue); expr_loc= exp.expr_loc}) = (get_type_expr gamma env exp1)) then (get_type_expr gamma env exp1) else raise (Error "assignment types not matching"); 
-    | Eunop (unop,exp1) -> let t = get_type_expr gamma env exp1 in if t == Tint then Tint else raise(Error("Bad type expression for UNOP"))
-    | Ebinop (binop, exp1 ,exp2) ->
+let rec convert_expr (gamma: gamma_type) (expr: Ptree.expr) : gamma_type * expr =
+    match expr.expr_node with
+	| Ptree.Econst(i) when i = 0l -> (gamma, create_expr Ttypenull (Econst(0l)))
+	| Ptree.Econst(i) -> (gamma, create_expr Tint (Econst(0l)))
+    | Ptree.Eright(lv) ->
         begin
-            let t1 = get_type_expr gamma env exp1 in
-            let t2 = get_type_expr gamma env exp2 in
+            match lv with
+            | Ptree.Lident(ident) ->
+                let str = ident.id in
+                let typ = get_typ_var gamma str in
+                (gamma, create_expr typ (Eaccess_local(ident.id)))
+            | Ptree.Larrow(expr1, ident1) ->
+                let (new_gamma, new_expr) = convert_expr gamma expr1 in
+                let field = get_field new_expr (ident1.id) in
+                (new_gamma, create_expr field.field_typ (Eaccess_field(new_expr, field)))
+        end
+    | Ptree.Eassign(lv, expr) ->
+        let (new_gamma, big_expr) = convert_expr gamma expr in
+        begin
+            match lv with
+            | Ptree.Lident(ident) ->
+                let str = ident.id in
+                let typ = get_typ_var new_gamma str in
+                (gamma, create_expr typ (Eassign_local(ident.id, big_expr)))
+            | Ptree.Larrow(expr1, ident1) ->
+                let (new_new_gamma, new_expr) = convert_expr new_gamma expr1 in
+                let field = get_field new_expr (ident1.id) in
+                (new_new_gamma, create_expr field.field_typ (Eassign_field(new_expr, field, big_expr)))
+        end
+    | Eunop(unop, expr) when unop = Unot ->
+        let (new_gamma, new_expr) = convert_expr gamma expr in
+        (new_gamma, create_expr Tint (Eunop(unop, new_expr)))
+    | Eunop(unop, expr) ->
+        let (new_gamma, new_expr) = convert_expr gamma expr in
+        if new_expr.expr_typ = Tint then
+            (new_gamma, create_expr Tint (Eunop(unop, new_expr)))
+        else
+            raise(Error("- should be before an int"))
+    | Ebinop(binop, expr1, expr2) ->
+        let (gamma1, nexpr1) = convert_expr gamma expr1 in
+        let (gamma2, nexpr2) = convert_expr gamma1 expr2 in
+        begin
             match binop with
-            | Beq | Bneq ->
-                if t1 = t2 || ((t1 = Ttypenull || t1 = Tint) && (t2 = Ttypenull || t2 = Tint))
-                then Tint
-                else raise(Error("Error with = or !="))
-            | _ -> if ((t1 = Ttypenull || t1 = Tint) && (t2 = Ttypenull || t2 = Tint)) then Tint else raise(Error("Error with = or !="))
+            | Band | Bor -> (gamma2, create_expr Tint (Ebinop(binop, nexpr1, nexpr2)))
+            | Badd | Bsub | Bmul | Bdiv ->
+                if nexpr1.expr_typ = Tint && nexpr2.expr_typ = Tint then
+                    (gamma2, create_expr Tint (Ebinop(binop, nexpr1, nexpr2)))
+                else
+                    raise(Error("Bad type for + - / *"))
+            | _ ->
+                if compatible (nexpr1.expr_typ) (nexpr2.expr_typ) then
+                    (gamma2, create_expr Tint (Ebinop(binop, nexpr1, nexpr2)))
+                else
+                    raise(Error("Uncompatible types"))
         end
-    | Esizeof (ident) -> if gamma_structure_mem (ident.id) gamma then Tint else raise(Error("Size of not a structure"))
-    | Ecall (ident,expl)-> let f = find_function ident gamma in
-    if check_function_bis gamma env f expl then (convert_type gamma f.fun_typ) else raise(Error("error in arguments of function"))
-
-let compatible ret_typ = function
-    | Ttypenull -> true
-    | Tvoidstar when ret_typ <> Tint -> true
-    | t -> t = ret_typ
-
-let rec check_statement gamma env (stmt: Ptree.stmt) ret_type =
-    match stmt.stmt_node with
-	| Ptree.Sskip -> true
-    | Ptree.Sexpr(exp) -> ignore(get_type_expr gamma env exp); true
-	| Ptree.Sif (exp, stmt1, stmt2) -> (get_type_expr gamma env exp = Tint) && (check_statement gamma env stmt1 ret_type) && (check_statement gamma env stmt2 ret_type)
-	| Ptree.Swhile (exp,stmt1) -> (get_type_expr gamma env exp = Tint) && (check_statement gamma env stmt1 ret_type)
-	| Ptree.Sblock (bloc)-> check_body gamma env bloc ret_type
-    | Ptree.Sreturn (exp) -> compatible ret_type (get_type_expr gamma env exp)
-and check_statements gamma env ret_type = function
-    | [] -> true
-    | t::q -> (check_statement gamma env t ret_type && check_statements gamma env ret_type q)
-and check_body gamma env (vars, stmts) (ret_type: Ttree.typ) =
-    if check_arguments gamma vars then
-        let new_env = vars@env in
-        check_statements gamma new_env ret_type stmts
-    else
-        raise(Error("Déclaration de variables illégale"))
-
-let add_fun (gamma: gamma_type) (f: Ptree.decl_fun) =
-    if List.mem f.fun_name.id (List.map (fun (f: Ptree.decl_fun) -> f.fun_name.id) gamma.functions) then
-        raise(Error("Deux fois la même fonction"))
-    else
-        {
-            structs = gamma.structs;
-            functions = f::gamma.functions
-        }
-
-let add_struct gamma s =
-    if List.mem (fst s) (List.map (fun (s: Ptree.decl_struct) -> fst s) gamma.structs) then
-        raise(Error("Deux fois la même fonction"))
-    else
-        {
-            structs = s::gamma.structs;
-            functions = gamma.functions
-        }
-
-let check_function (decl_fun: Ptree.decl_fun) gamma =
-    let b1 = check_type gamma decl_fun.fun_typ in
-    if not b1 then raise(Error("ERROR B1"));
-    let b2 = check_arguments gamma decl_fun.fun_formals in
-    if not b2 then raise(Error("ERROR B2"));
-    let gamma_prime = add_fun gamma decl_fun in
-    let b3 = check_body gamma_prime decl_fun.fun_formals decl_fun.fun_body (convert_type gamma decl_fun.fun_typ) in
-    if not b3 then raise(Error("ERROR B3"));
-    let b4 = unique (List.map (fun (x: Ptree.decl_var) -> (snd x).id) decl_fun.fun_formals) in
-    b1 && b2 && b3 && b4
-
-let jugement gamma = function
-    | Ptree.Dstruct((ident, decl_list)) -> if (struct_bien_formee gamma decl_list) && (not (gamma_structure_mem ident.id gamma)) then
-        add_struct gamma (ident, decl_list)
-    else
-        raise(Error("Structure mal formée ou type existant"))
-    | Ptree.Dfun(decl_fun) -> if (check_function decl_fun gamma) then
-        add_fun gamma decl_fun
-    else
-        raise(Error("Fonction mal déclarée"))
-
-let rec convert_expr_node gamma env (expr_node: Ptree.expr_node) : Ttree.expr_node =
-	match expr_node with
-	| Eassign (Lident(ident), expr) -> Eassign_local(ident.id, convert_expr gamma expr)
-	| Eassign (Larrow(expr1, ident), expr2) ->
-            let typ1 = get_type_expr gamma env expr1 in
-            let field =
-            begin
-                match typ1 with
-                | Tstructp(structure) -> Hashtbl.find structure.str_fields ident.id
-                | _ -> raise(Error("Not structure in s.x"))
-            end
-            in Eassign_field(convert_expr gamma expr1, field, convert_expr gamma expr2)
-	| Eright(Lident(ident)) -> Eaccess_local(ident.id)
-	| Eright(Larrow(expr1, ident)) ->
-        let typ1 = get_type_expr gamma env expr1 in
-        let field =
+    | Ecall(ident, expl) ->
+        let f = get_fun gamma (ident.id) in
         begin
-            match typ1 with
-            | Tstructp(structure) -> Hashtbl.find structure.str_fields ident.id
-            | _ -> raise(Error("Not structure in s.x"))
+            let new_gamma = ref gamma in
+            let rec aux a b =
+                match (a, b) with
+                | ([], []) -> []
+                | (expr::q1, (typ, _)::q2) ->
+                    let (temp_gamma, new_expr) = convert_expr (!new_gamma) expr in
+                    new_gamma := temp_gamma;
+                    if compatible typ (new_expr.expr_typ) then
+                        new_expr::(aux q1 q2)
+                    else
+                        raise(Error("Argument not the right type"))
+                | _ -> raise(Error("Mismatch in the number of arguments"))
+            in  (!new_gamma, create_expr (f.fun_typ) (Ecall(ident.id, aux expl (f.fun_formals))))
         end
-        in Eaccess_field(convert_expr gamma expr1, field)
-    | Eunop(unop, expr) -> Eunop(unop, convert_expr gamma expr)
-    | Ebinop(binop, expr1, expr2) -> Ebinop(binop, convert_expr gamma expr1, convert_expr gamma expr2)
-    | Ecall(ident, expl) -> Ecall(ident.id, List.map (convert_expr gamma) expl)
-    | Esizeof(ident) -> begin
-        let t = convert_type gamma (Ptree.Tstructp(ident))
-        in match t with
-        | Tstructp(structure) -> Esizeof(structure)
-        | _ -> raise(Error("ESIZEOF"))
-    end
-    | Econst(i) -> Econst(i)
-and convert_expr gamma (expr: Ptree.expr) : Ttree.expr =
-    let env = [] in
+    | Esizeof(ident) ->
+        let s = get_structure gamma (ident.id) in
+        (gamma, create_expr Tint (Esizeof(s)))
+
+let execute_structure gamma ((ident, decl_var_list):Ptree.decl_struct) : structure  =
+    let table = Hashtbl.create 17 in
+    let rec aux (l: Ptree.decl_var list) =
+        match l with
+        | [] -> ()
+        | (Ptree.Tint, small_ident)::q -> Hashtbl.add table small_ident.id {field_name = small_ident.id; field_typ = Tint}; aux q
+        | (Ptree.Tstructp(other_ident), small_ident)::q ->
+            let s = get_structure gamma (other_ident.id) in
+            Hashtbl.add table small_ident.id {field_name = small_ident.id; field_typ = Tstructp(s)}; aux q
+    in aux decl_var_list;
     {
-        expr_node = convert_expr_node gamma env expr.expr_node;
-        expr_typ = get_type_expr gamma env expr;
+        str_name = ident.id;
+        str_fields = table;
     }
 
-let convert gamma p =
-    let rec convert_stmt_node = function
-		| Ptree.Sskip -> Sskip
-        | Ptree.Sexpr(expr) -> Sexpr(convert_expr gamma expr)
-		| Ptree.Sif(expr, stmt1, stmt2) -> Sif(
-            convert_expr gamma expr,
-            convert_stmt stmt1,
-            convert_stmt stmt2)
-		| Ptree.Swhile(expr, stmt) -> Swhile(
-            convert_expr gamma expr,
-            convert_stmt stmt)
-		| Ptree.Sblock(block) -> Sblock(convert_block block)
-		| Ptree.Sreturn(expr) -> Sreturn(convert_expr gamma expr)
-    and convert_stmt (stmt: Ptree.stmt) =
-        convert_stmt_node stmt.stmt_node
-    and convert_var ((typ, ident): Ptree.decl_var) =
-        (convert_type gamma typ, ident.id)
-    and convert_block ((decl_var_list, stmt_list): Ptree.block) =
-        (List.map convert_var decl_var_list), (List.map convert_stmt stmt_list)
-    in
-    let convert_fun (f: Ptree.decl_fun) =
-    {
-        fun_typ = convert_type gamma f.fun_typ;
-        fun_name = f.fun_name.id;
-        fun_formals = List.map convert_var f.fun_formals;
-        fun_body = convert_block f.fun_body
-    }
-    in
-    let rec convert_p = function
-    | [] -> []
-    | (Ptree.Dfun(decl_fun)::q) -> (convert_fun decl_fun)::(convert_p q)
-    | t::q -> convert_p q
-    in
-    convert_p p
+let execute_function gamma decl_fun : gamma_type * decl_fun =
+    raise(Error("To be implemented"))
 
-let program p =
-   let rec aux gamma = function
+let program file = 
+    let rec aux gamma = function
     | [] -> gamma
-    | t::q -> aux (jugement gamma t) q
-    in let gamma_vide = {
-        structs = [];
-        functions = []
-    }
-    in {funs = convert (aux gamma_vide p) p}
+    | Ptree.Dstruct(decl_struct)::q ->
+        let structure = execute_structure gamma decl_struct in
+        aux (add_structure gamma structure) q
+    | Ptree.Dfun(decl_fun)::q ->
+        let (new_gamma, fonction) = execute_function gamma decl_fun in
+        aux (add_fun new_gamma fonction) q
+    in {funs = (aux {variables = []; structs = []; functions = []} file).functions}
