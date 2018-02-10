@@ -124,8 +124,8 @@ let rec check_statement gamma env (stmt: Ptree.stmt) ret_type =
 	| Ptree.Sreturn (exp) -> get_type_expr gamma env exp = ret_type
 and check_statements gamma env ret_type = function
     | [] -> true
-    | t::q -> check_statement gamma env t ret_type && check_statements gamma env ret_type q
-and check_body gamma env (vars, stmts) (ret_type: Ptree.typ) =
+    | t::q -> (check_statement gamma env t ret_type && check_statements gamma env ret_type q)
+and check_body gamma env (vars, stmts) (ret_type: Ttree.typ) =
     if check_arguments gamma vars then
         let new_env = vars@env in
         check_statements gamma new_env ret_type stmts
@@ -138,12 +138,7 @@ let add_fun gamma (f: Ptree.decl_fun) =
         functions = f::gamma.functions
     }
 
-let add_struct gamma s =let gamma_structure_find x (gamma: gamma_type) =
-let rec aux (l: Ptree.decl_struct list) =
- match l with
- | [] -> raise (Error "not an existing structure")
- | (name, dec_varl)::q -> if (name.id = x ) then dec_varl else (aux q)
- in aux gamma.structs
+let add_struct gamma s =
     {
         structs = s::gamma.structs;
         functions = gamma.functions
@@ -153,7 +148,7 @@ let check_function (decl_fun: Ptree.decl_fun) gamma =
     let b1 = check_type gamma decl_fun.fun_typ in
     let b2 = check_arguments gamma decl_fun.fun_formals in
     let gamma_prime = add_fun gamma decl_fun in
-    let b3 = check_body gamma_prime decl_fun.fun_formals decl_fun.fun_body decl_fun.fun_typ in
+    let b3 = check_body gamma_prime decl_fun.fun_formals decl_fun.fun_body (convert_type gamma decl_fun.fun_typ) in
     b1 && b2 && b3
 
 let jugement gamma = function
