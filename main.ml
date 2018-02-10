@@ -42,7 +42,7 @@ let () =
     let p = Parser.file Lexer.token buf in
     close_in f;
     if !parse_only then exit 0;
-    let p = Typing.program p in
+    let _ = Typing.program p in
     if !type_only then exit 0;
   with
     | Lexer.Lexical_error c ->

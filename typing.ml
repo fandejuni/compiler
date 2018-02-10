@@ -74,7 +74,7 @@ let rec find_function (ident: Ptree.ident) gamma =
     in
     aux gamma.functions
 
-let rec check_function gamma env (f: Ptree.decl_fun) l =
+let rec check_function_bis gamma env (f: Ptree.decl_fun) l =
     (* TODO *)
     let rec aux (l_args: Ptree.decl_var list) l_exps =
     match (l_args, l_exps) with
@@ -112,7 +112,12 @@ and get_type_expr gamma env (exp : Ptree.expr) =
         end
     | Esizeof (ident) -> if gamma_structure_mem (ident.id) gamma then Tint else raise(Error("Size of not a structure"))
     | Ecall (ident,expl)-> let f = find_function ident gamma in
-    if check_function gamma env f expl then (convert_type gamma f.fun_typ) else raise(Error("error in arguments of function"))
+    if check_function_bis gamma env f expl then (convert_type gamma f.fun_typ) else raise(Error("error in arguments of function"))
+
+let compatible ret_typ = function
+    | Ttypenull -> true
+    | Tvoidstar when ret_typ <> Tint -> true
+    | t -> t = ret_typ
 
 let rec check_statement gamma env (stmt: Ptree.stmt) ret_type =
     match stmt.stmt_node with
@@ -121,7 +126,7 @@ let rec check_statement gamma env (stmt: Ptree.stmt) ret_type =
 	| Ptree.Sif (exp, stmt1, stmt2) -> (get_type_expr gamma env exp = Tint) && (check_statement gamma env stmt1 ret_type) && (check_statement gamma env stmt2 ret_type)
 	| Ptree.Swhile (exp,stmt1) -> (get_type_expr gamma env exp = Tint) && (check_statement gamma env stmt1 ret_type)
 	| Ptree.Sblock (bloc)-> check_body gamma env bloc ret_type
-	| Ptree.Sreturn (exp) -> get_type_expr gamma env exp = ret_type
+    | Ptree.Sreturn (exp) -> compatible ret_type (get_type_expr gamma env exp)
 and check_statements gamma env ret_type = function
     | [] -> true
     | t::q -> (check_statement gamma env t ret_type && check_statements gamma env ret_type q)
@@ -146,9 +151,12 @@ let add_struct gamma s =
 
 let check_function (decl_fun: Ptree.decl_fun) gamma =
     let b1 = check_type gamma decl_fun.fun_typ in
+    if not b1 then raise(Error("ERROR B1"));
     let b2 = check_arguments gamma decl_fun.fun_formals in
+    if not b2 then raise(Error("ERROR B2"));
     let gamma_prime = add_fun gamma decl_fun in
     let b3 = check_body gamma_prime decl_fun.fun_formals decl_fun.fun_body (convert_type gamma decl_fun.fun_typ) in
+    if not b3 then raise(Error("ERROR B3"));
     b1 && b2 && b3
 
 let jugement gamma = function
@@ -161,8 +169,44 @@ let jugement gamma = function
     else
         raise(Error("Fonction mal déclarée"))
 
-let convert_expr gamma expr : Ttree.expr =
-    raise(Error("Not cool"))
+let rec convert_expr_node gamma env (expr_node: Ptree.expr_node) : Ttree.expr_node =
+	match expr_node with
+	| Eassign (Lident(ident), expr) -> Eassign_local(ident.id, convert_expr gamma expr)
+	| Eassign (Larrow(expr1, ident), expr2) ->
+            let typ1 = get_type_expr gamma env expr1 in
+            let field =
+            begin
+                match typ1 with
+                | Tstructp(structure) -> Hashtbl.find structure.str_fields ident.id
+                | _ -> raise(Error("Not structure in s.x"))
+            end
+            in Eassign_field(convert_expr gamma expr1, field, convert_expr gamma expr2)
+	| Eright(Lident(ident)) -> Eaccess_local(ident.id)
+	| Eright(Larrow(expr1, ident)) ->
+        let typ1 = get_type_expr gamma env expr1 in
+        let field =
+        begin
+            match typ1 with
+            | Tstructp(structure) -> Hashtbl.find structure.str_fields ident.id
+            | _ -> raise(Error("Not structure in s.x"))
+        end
+        in Eaccess_field(convert_expr gamma expr1, field)
+    | Eunop(unop, expr) -> Eunop(unop, convert_expr gamma expr)
+    | Ebinop(binop, expr1, expr2) -> Ebinop(binop, convert_expr gamma expr1, convert_expr gamma expr2)
+    | Ecall(ident, expl) -> Ecall(ident.id, List.map (convert_expr gamma) expl)
+    | Esizeof(ident) -> begin
+        let t = convert_type gamma (Ptree.Tstructp(ident))
+        in match t with
+        | Tstructp(structure) -> Esizeof(structure)
+        | _ -> raise(Error("ESIZEOF"))
+    end
+    | Econst(i) -> Econst(i)
+and convert_expr gamma (expr: Ptree.expr) : Ttree.expr =
+    let env = [] in
+    {
+        expr_node = convert_expr_node gamma env expr.expr_node;
+        expr_typ = get_type_expr gamma env expr;
+    }
 
 let convert gamma p =
     let rec convert_stmt_node = function
