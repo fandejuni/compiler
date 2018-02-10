@@ -110,7 +110,7 @@ and get_type_expr gamma env (exp : Ptree.expr) =
                 else raise(Error("Error with = or !="))
             | _ -> if ((t1 = Ttypenull || t1 = Tint) && (t2 = Ttypenull || t2 = Tint)) then Tint else raise(Error("Error with = or !="))
         end
-    | Esizeof (ident) -> if gamma_structure_find gamma then Tint else raise(Error "Size of not a structure")
+    | Esizeof (ident) -> if gamma_structure_mem (ident.id) gamma then Tint else raise(Error("Size of not a structure"))
     | Ecall (ident,expl)-> let f = find_function ident gamma in
     if check_function gamma env f expl then (convert_type gamma f.fun_typ) else raise(Error("error in arguments of function"))
 
