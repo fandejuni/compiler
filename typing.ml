@@ -36,21 +36,24 @@ let check_type gamma = function
     | Ptree.Tint -> true
     | Ptree.Tstructp(ident) -> gamma_structure_mem ident.id gamma
 
-(* TODO: check si deux identifiants égaux *)
-let struct_bien_formee gamma structure =
-    let rec unique accu = function
+let unique l =
+    let rec aux accu = function
     | [] -> true
-    | (t, _)::q -> if List.mem t accu then false else unique (t::accu) q
-    in
+    | t::q -> if List.mem t accu then false else aux (t::accu) q
+    in aux [] l
+
+let struct_bien_formee gamma structure =
     let rec aux = function
     | [] -> true
     | (typ, ident)::q -> check_type gamma typ && aux q
     in
-    aux structure && unique [] structure
+    aux structure && unique (List.map fst structure)
 
-let rec check_arguments gamma = function
+let check_arguments gamma args =
+    let rec aux = function
     | [] -> true
-    | (typ, _)::q -> check_type gamma typ && check_arguments gamma q
+    | (typ, _)::q -> check_type gamma typ && aux q
+    in aux args && unique (List.map (fun (x: Ptree.decl_var) -> (snd x).id) args)
 
 let rec convert_type gamma (typ: Ptree.typ) : Ttree.typ =
     let rec fill struc = function
@@ -170,7 +173,8 @@ let check_function (decl_fun: Ptree.decl_fun) gamma =
     let gamma_prime = add_fun gamma decl_fun in
     let b3 = check_body gamma_prime decl_fun.fun_formals decl_fun.fun_body (convert_type gamma decl_fun.fun_typ) in
     if not b3 then raise(Error("ERROR B3"));
-    b1 && b2 && b3
+    let b4 = unique (List.map (fun (x: Ptree.decl_var) -> (snd x).id) decl_fun.fun_formals) in
+    b1 && b2 && b3 && b4
 
 let jugement gamma = function
     | Ptree.Dstruct((ident, decl_list)) -> if (struct_bien_formee gamma decl_list) && (not (gamma_structure_mem ident.id gamma)) then
