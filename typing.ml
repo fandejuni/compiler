@@ -37,9 +37,16 @@ let check_type gamma = function
     | Ptree.Tstructp(ident) -> gamma_structure_mem ident.id gamma
 
 (* TODO: check si deux identifiants égaux *)
-let rec struct_bien_formee gamma = function
+let struct_bien_formee gamma structure =
+    let rec unique accu = function
     | [] -> true
-    | (typ, ident)::q -> check_type gamma typ && struct_bien_formee gamma q
+    | (t, _)::q -> if List.mem t accu then false else unique (t::accu) q
+    in
+    let rec aux = function
+    | [] -> true
+    | (typ, ident)::q -> check_type gamma typ && aux q
+    in
+    aux structure && unique [] structure
 
 let rec check_arguments gamma = function
     | [] -> true
