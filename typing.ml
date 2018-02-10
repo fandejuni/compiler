@@ -138,12 +138,7 @@ let add_fun gamma (f: Ptree.decl_fun) =
         functions = f::gamma.functions
     }
 
-let add_struct gamma s =let gamma_structure_find x (gamma: gamma_type) =
-let rec aux (l: Ptree.decl_struct list) =
- match l with
- | [] -> raise (Error "not an existing structure")
- | (name, dec_varl)::q -> if (name.id = x ) then dec_varl else (aux q)
- in aux gamma.structs
+let add_struct gamma s =
     {
         structs = s::gamma.structs;
         functions = gamma.functions
