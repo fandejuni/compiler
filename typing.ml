@@ -66,7 +66,24 @@ let rec get_type_env id = function
     |(typ, ident)::q when (id=ident) -> typ
     | _::q -> get_type_env id q
 
-let rec get_type_expr gamma env (exp : Ptree.expr) = 
+let rec find_function (ident: Ptree.ident) gamma =
+    let rec aux (l: Ptree.decl_fun list) =
+    match l with
+    | [] -> raise(Error("This function doesn't exist"))
+    | t::q -> if t.fun_name.id = ident.id then t else aux q
+    in
+    aux gamma.functions
+
+let rec check_function gamma env (f: Ptree.decl_fun) l =
+    (* TODO *)
+    let rec aux (l_args: Ptree.decl_var list) l_exps =
+    match (l_args, l_exps) with
+    | ([], []) -> true
+    | ((typ1, ident1)::q, exp::t) -> let typ = get_type_expr gamma env exp in (typ = (convert_type gamma typ1)) && aux q t
+    | _ -> false
+    in
+    aux f.fun_formals l
+and get_type_expr gamma env (exp : Ptree.expr) = 
     (* TODO *)
     match exp.expr_node with
     | Econst(0l) -> Ttypenull
@@ -81,7 +98,7 @@ let rec get_type_expr gamma env (exp : Ptree.expr) =
         end
     end
     | Eassign (lvalue,exp1)-> if ((get_type_expr gamma env {expr_node = Eright(lvalue); expr_loc= exp.expr_loc}) = (get_type_expr gamma env exp1)) then (get_type_expr gamma env exp1) else raise (Error "assignment types not matching"); 
-    | Eunop (unop,exp1) -> false
+    | Eunop (unop,exp1) -> let t = get_type_expr gamma env exp1 in if t == Tint then Tint else raise(Error("Bad type expression for UNOP"))
     | Ebinop (binop, exp1 ,exp2) ->
         begin
             let t1 = get_type_expr gamma env exp1 in
@@ -91,9 +108,10 @@ let rec get_type_expr gamma env (exp : Ptree.expr) =
                 if t1 = t2 || ((t1 = Ttypenull || t1 = Tint) && (t2 = Ttypenull || t2 = Tint))
                 then Tint
                 else raise(Error("Error with = or !="))
-            | _ -> ((t1 = Ttypenull || t1 = Tint) && (t2 = Ttypenull || t2 = Tint))
+            | _ -> if ((t1 = Ttypenull || t1 = Tint) && (t2 = Ttypenull || t2 = Tint)) then Tint else raise(Error("Error with = or !="))
         end
-    | Ecall (ident,expl)->false
+    | Ecall (ident,expl)-> let f = find_function ident gamma in
+    if check_function gamma env f expl then (convert_type gamma f.fun_typ) else raise(Error("error in arguments of function"))
     | Esizeof (ident) ->false
 
 let rec check_statement gamma env (stmt: Ptree.stmt) ret_type =
@@ -147,10 +165,6 @@ let jugement gamma = function
         add_fun gamma decl_fun
     else
         raise(Error("Fonction mal déclarée"))
-
-
-
-
 
 let convert_expr gamma expr : Ttree.expr =
     raise(Error("Not cool"))
