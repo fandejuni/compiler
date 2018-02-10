@@ -144,17 +144,23 @@ and check_body gamma env (vars, stmts) (ret_type: Ttree.typ) =
     else
         raise(Error("Déclaration de variables illégale"))
 
-let add_fun gamma (f: Ptree.decl_fun) =
-    {
-        structs = gamma.structs;
-        functions = f::gamma.functions
-    }
+let add_fun (gamma: gamma_type) (f: Ptree.decl_fun) =
+    if List.mem f.fun_name.id (List.map (fun (f: Ptree.decl_fun) -> f.fun_name.id) gamma.functions) then
+        raise(Error("Deux fois la même fonction"))
+    else
+        {
+            structs = gamma.structs;
+            functions = f::gamma.functions
+        }
 
 let add_struct gamma s =
-    {
-        structs = s::gamma.structs;
-        functions = gamma.functions
-    }
+    if List.mem (fst s) (List.map (fun (s: Ptree.decl_struct) -> fst s) gamma.structs) then
+        raise(Error("Deux fois la même fonction"))
+    else
+        {
+            structs = s::gamma.structs;
+            functions = gamma.functions
+        }
 
 let check_function (decl_fun: Ptree.decl_fun) gamma =
     let b1 = check_type gamma decl_fun.fun_typ in
