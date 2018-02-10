@@ -94,7 +94,8 @@ let rec get_type_expr gamma env (exp : Ptree.expr) =
             | _ -> ((t1 = Ttypenull || t1 = Tint) && (t2 = Ttypenull || t2 = Tint))
         end
     | Ecall (ident,expl)->false
-    | Esizeof (ident) ->false
+    | Esizeof (ident) -> if gamma_structure_find gamma then Tint else raise(Error "Size of not a structure")
+
 
 let rec check_statement gamma env (stmt: Ptree.stmt) ret_type =
     match stmt.stmt_node with
