@@ -13,13 +13,7 @@ type gamma_type = {
     variables : decl_var list;
     structs : structure list;
     functions : decl_fun list;
-}
-
-let add_var gamma decl_var =
-{
-    variables = decl_var::gamma.variables;
-    structs = gamma.structs;
-    functions = gamma.functions;
+    ret_typ : typ;
 }
 
 let add_structure gamma structure =
@@ -27,6 +21,7 @@ let add_structure gamma structure =
     variables = gamma.variables;
     structs = structure::gamma.structs;
     functions = gamma.functions;
+    ret_typ = gamma.ret_typ;
 }
 
 let add_fun gamma decl_fun =
@@ -34,13 +29,23 @@ let add_fun gamma decl_fun =
     variables = gamma.variables;
     structs = gamma.structs;
     functions = decl_fun::gamma.functions;
+    ret_typ = gamma.ret_typ;
 }
 
-let add_var gamma decl_var =
+let create_env gamma decl_var_list : gamma_type =
 {
-    variables = decl_var::gamma.variables;
+    variables = decl_var_list;
     structs = gamma.structs;
     functions = gamma.functions;
+    ret_typ = gamma.ret_typ;
+}
+
+let set_ret_type gamma typ =
+{
+    variables = gamma.variables;
+    structs = gamma.structs;
+    functions = gamma.functions;
+    ret_typ = typ;
 }
 
 let create_expr typ expr_node =
@@ -80,7 +85,46 @@ let get_fun gamma str =
     | f::q -> if f.fun_name = str then f else aux q
     in aux gamma.functions
 
-let rec convert_expr (gamma: gamma_type) (expr: Ptree.expr) : gamma_type * expr =
+let convert_typ gamma = function
+    | Ptree.Tint -> Tint
+    | Ptree.Tstructp(ident) -> 
+        let s = get_structure gamma (ident.id) in
+        Tstructp(s)
+
+let convert_decl_var gamma ((typ, ident): Ptree.decl_var) : decl_var =
+    (convert_typ gamma typ, ident.id)
+
+let rec convert_block gamma ((old_decl_var_list, stmt_list):Ptree.block) : block =
+    let decl_var_list = List.map (convert_decl_var gamma) old_decl_var_list in
+    let gamma1 = create_env gamma decl_var_list in
+    let rec aux gamma2 =  function
+    | [] -> []
+    | stmt::q -> let (gamma3, stmt2) = convert_stmt gamma2 stmt in
+        stmt2::(aux gamma3 q)
+    in (decl_var_list, aux gamma1 stmt_list)
+and convert_stmt gamma (stmt: Ptree.stmt) : gamma_type * stmt =
+    match stmt.stmt_node with
+    | Ptree.Sskip -> (gamma, Sskip)
+    | Ptree.Sexpr(expr) -> let (new_gamma, new_expr) = convert_expr gamma expr in
+        (new_gamma, Sexpr(new_expr))
+    | Ptree.Sif(expr, stmt1, stmt2) -> 
+        let (gamma1, new_expr) = convert_expr gamma expr in
+        (* TODO: check if statements same types? *)
+        let (gamma2, new_stmt1) = convert_stmt gamma1 stmt1 in
+        let (gamma3, new_stmt2) = convert_stmt gamma2 stmt2 in
+        (gamma3, Sif(new_expr, new_stmt1, new_stmt2))
+    | Ptree.Swhile(expr, stmt) ->
+        let (gamma1, new_expr) = convert_expr gamma expr in
+        let (gamma2, new_stmt) = convert_stmt gamma1 stmt in
+        (gamma2, Swhile(new_expr, new_stmt))
+    | Ptree.Sblock(block) ->
+        let new_block = convert_block gamma block in
+        (gamma, Sblock(new_block))
+    | Ptree.Sreturn(expr) ->
+        let (new_gamma, new_expr) = convert_expr gamma expr in
+        (* TODO: check the type of return *)
+        (new_gamma, Sreturn(new_expr))
+and convert_expr (gamma: gamma_type) (expr: Ptree.expr) : gamma_type * expr =
     match expr.expr_node with
 	| Ptree.Econst(i) when i = 0l -> (gamma, create_expr Ttypenull (Econst(0l)))
 	| Ptree.Econst(i) -> (gamma, create_expr Tint (Econst(0l)))
@@ -171,8 +215,18 @@ let execute_structure gamma ((ident, decl_var_list):Ptree.decl_struct) : structu
         str_fields = table;
     }
 
-let execute_function gamma decl_fun : gamma_type * decl_fun =
-    raise(Error("To be implemented"))
+let convert_function old_gamma (decl_fun: Ptree.decl_fun) : decl_fun =
+    let typ = convert_typ old_gamma (decl_fun.fun_typ) in
+    let gamma = set_ret_type old_gamma typ in
+    let name = (decl_fun.fun_name).id in
+    let formals = List.map (convert_decl_var gamma) decl_fun.fun_formals in
+    let block = convert_block gamma (decl_fun.fun_body) in
+    {
+        fun_typ = typ;
+        fun_name = name;
+        fun_formals = formals;
+        fun_body = block;
+    }
 
 let program file = 
     let rec aux gamma = function
@@ -181,6 +235,6 @@ let program file =
         let structure = execute_structure gamma decl_struct in
         aux (add_structure gamma structure) q
     | Ptree.Dfun(decl_fun)::q ->
-        let (new_gamma, fonction) = execute_function gamma decl_fun in
-        aux (add_fun new_gamma fonction) q
-    in {funs = (aux {variables = []; structs = []; functions = []} file).functions}
+        let fonction = convert_function gamma decl_fun in
+        aux (add_fun gamma fonction) q
+    in {funs = (aux {variables = []; structs = []; functions = []; ret_typ = Tint} file).functions}
