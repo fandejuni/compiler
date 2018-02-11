@@ -23,6 +23,14 @@ let unique l =
     else aux (t::accu) q
     in aux [] l
 
+let reset_env gamma =
+    {
+        variables = [];
+        structs = gamma.structs;
+        functions = gamma.functions;
+        ret_typ = gamma.ret_typ;
+    }
+
 let add_structure gamma structure =
     let l = structure::gamma.structs in
     if unique l then
@@ -47,13 +55,13 @@ let add_fun gamma decl_fun =
     else
         raise(Error("Twice the same function"))
 
-let create_env gamma decl_var_list : gamma_type =
-{
-    variables = decl_var_list;
-    structs = gamma.structs;
-    functions = gamma.functions;
-    ret_typ = gamma.ret_typ;
-}
+let add_to_env gamma decl_var_list : gamma_type =
+    {
+        variables = decl_var_list@gamma.variables;
+        structs = gamma.structs;
+        functions = gamma.functions;
+        ret_typ = gamma.ret_typ;
+    }
 
 let set_ret_type gamma typ =
 {
@@ -85,7 +93,7 @@ let get_structure gamma str =
 
 let get_typ_var gamma str =
     let rec aux = function
-    | [] -> raise(Error("Unknown variable"))
+    | [] -> raise(Error("Unknown variable: " ^ str ^ "\n"))
     | (typ, ident)::q -> if ident = str then typ else aux q
     in aux gamma.variables
 
@@ -118,7 +126,7 @@ let convert_list gamma (decl_var_list: Ptree.decl_var list) : decl_var list =
 
 let rec convert_block gamma ((old_decl_var_list, stmt_list):Ptree.block) : block =
     let decl_var_list = convert_list gamma old_decl_var_list in
-    let gamma1 = create_env gamma decl_var_list in
+    let gamma1 = add_to_env gamma decl_var_list in
     let rec aux gamma2 =  function
     | [] -> []
     | stmt::q -> let (gamma3, stmt2) = convert_stmt gamma2 stmt in
@@ -222,6 +230,25 @@ and convert_expr (gamma: gamma_type) (expr: Ptree.expr) : gamma_type * expr =
         let s = get_structure gamma (ident.id) in
         (gamma, create_expr Tint (Esizeof(s)))
 
+let fake_structure =
+    {
+        str_name = "structure_non_existent_for_recursive_purposes";
+        str_fields = Hashtbl.create 0;
+    }
+
+let purify_structure structure =
+    let aux ident field =
+        match field.field_typ with
+        | Tstructp(s) ->
+            if s.str_name = "structure_non_existent_for_recursive_purposes" then
+                Hashtbl.replace structure.str_fields ident {
+                    field_name = field.field_name;
+                    field_typ = Tstructp(structure);
+                }
+        | _ -> ()
+    in
+    Hashtbl.iter aux structure.str_fields
+
 let execute_structure gamma ((ident, decl_var_list):Ptree.decl_struct) : structure  =
     let table = Hashtbl.create 17 in
     let rec aux (l: Ptree.decl_var list) =
@@ -236,20 +263,26 @@ let execute_structure gamma ((ident, decl_var_list):Ptree.decl_struct) : structu
             if Hashtbl.mem table (small_ident.id) then
                 raise(Error("Twice the same name of field in structure"))
             else
-                let s = get_structure gamma (other_ident.id) in
-                Hashtbl.add table small_ident.id {field_name = small_ident.id; field_typ = Tstructp(s)}; aux q
+                let s =
+                    if other_ident.id = (ident.id) then fake_structure
+                    else get_structure gamma (other_ident.id)
+                in Hashtbl.add table small_ident.id {field_name = small_ident.id; field_typ = Tstructp(s)}; aux q
     in aux decl_var_list;
-    {
+    let s = {
         str_name = ident.id;
         str_fields = table;
-    }
+    } in
+    purify_structure s;
+    s
 
-let convert_function old_gamma (decl_fun: Ptree.decl_fun) : decl_fun =
-    let typ = convert_typ old_gamma (decl_fun.fun_typ) in
-    let gamma = set_ret_type old_gamma typ in
+let convert_function gamma0 (decl_fun: Ptree.decl_fun) : decl_fun =
+    let typ = convert_typ gamma0 (decl_fun.fun_typ) in
+    let gamma1 = set_ret_type gamma0 typ in
+    let gamma2 = reset_env gamma1 in
     let name = (decl_fun.fun_name).id in
-    let formals = convert_list gamma (decl_fun.fun_formals) in
-    let block = convert_block gamma (decl_fun.fun_body) in
+    let formals = convert_list gamma2 (decl_fun.fun_formals) in
+    let gamma3 = add_to_env gamma2 formals in
+    let block = convert_block gamma3 (decl_fun.fun_body) in
     {
         fun_typ = typ;
         fun_name = name;
