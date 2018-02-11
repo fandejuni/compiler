@@ -200,7 +200,7 @@ and convert_expr (gamma: gamma_type) (expr: Ptree.expr) : gamma_type * expr =
             match binop with
             | Band | Bor -> (gamma2, create_expr Tint (Ebinop(binop, nexpr1, nexpr2)))
             | Badd | Bsub | Bmul | Bdiv ->
-                if nexpr1.expr_typ = Tint && nexpr2.expr_typ = Tint then
+                if compatible (nexpr1.expr_typ) Tint && compatible (nexpr2.expr_typ) Tint then
                     (gamma2, create_expr Tint (Ebinop(binop, nexpr1, nexpr2)))
                 else
                     raise(Error("Bad type for + - / *"))
