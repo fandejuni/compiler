@@ -257,6 +257,22 @@ let convert_function old_gamma (decl_fun: Ptree.decl_fun) : decl_fun =
         fun_body = block;
     }
 
+let empty_gamma =
+    let putchar = {
+        fun_typ = Tint;
+        fun_name = "putchar";
+        fun_body = ([], []);
+        fun_formals = [(Tint, "c")];
+    } in
+    let sbrk = {
+        fun_typ = Tvoidstar;
+        fun_name = "sbrk";
+        fun_body = ([], []);
+        fun_formals = [(Tint, "n")];
+    } in
+
+    {variables = []; structs = []; functions = [putchar; sbrk]; ret_typ = Tint}
+
 let program file = 
     let rec aux gamma = function
     | [] -> gamma
@@ -266,4 +282,4 @@ let program file =
     | Ptree.Dfun(decl_fun)::q ->
         let fonction = convert_function gamma decl_fun in
         aux (add_fun gamma fonction) q
-    in {funs = (aux {variables = []; structs = []; functions = []; ret_typ = Tint} file).functions}
+    in {funs = (aux empty_gamma file).functions}
