@@ -227,10 +227,17 @@ let execute_structure gamma ((ident, decl_var_list):Ptree.decl_struct) : structu
     let rec aux (l: Ptree.decl_var list) =
         match l with
         | [] -> ()
-        | (Ptree.Tint, small_ident)::q -> Hashtbl.add table small_ident.id {field_name = small_ident.id; field_typ = Tint}; aux q
+        | (Ptree.Tint, small_ident)::q ->
+            if Hashtbl.mem table (small_ident.id) then
+                raise(Error("Twice the same name of field in structure"))
+            else
+                Hashtbl.add table small_ident.id {field_name = small_ident.id; field_typ = Tint}; aux q
         | (Ptree.Tstructp(other_ident), small_ident)::q ->
-            let s = get_structure gamma (other_ident.id) in
-            Hashtbl.add table small_ident.id {field_name = small_ident.id; field_typ = Tstructp(s)}; aux q
+            if Hashtbl.mem table (small_ident.id) then
+                raise(Error("Twice the same name of field in structure"))
+            else
+                let s = get_structure gamma (other_ident.id) in
+                Hashtbl.add table small_ident.id {field_name = small_ident.id; field_typ = Tstructp(s)}; aux q
     in aux decl_var_list;
     {
         str_name = ident.id;
