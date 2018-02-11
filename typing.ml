@@ -104,7 +104,7 @@ let get_field expr ident =
 
 let get_fun gamma str =
     let rec aux = function
-    | [] -> raise(Error("Unknown function"))
+    | [] -> raise(Error("Unknown function: " ^ str))
     | f::q -> if f.fun_name = str then f else aux q
     in aux gamma.functions
 
@@ -155,6 +155,7 @@ and convert_stmt gamma (stmt: Ptree.stmt) : gamma_type * stmt =
         (* TODO: check the type of return *)
         (new_gamma, Sreturn(new_expr))
 and convert_expr (gamma: gamma_type) (expr: Ptree.expr) : gamma_type * expr =
+    (* print_string "CONVERT EXPR"; *)
     match expr.expr_node with
 	| Ptree.Econst(i) when i = 0l -> (gamma, create_expr Ttypenull (Econst(0l)))
 	| Ptree.Econst(i) -> (gamma, create_expr Tint (Econst(0l)))
@@ -282,7 +283,15 @@ let convert_function gamma0 (decl_fun: Ptree.decl_fun) : decl_fun =
     let name = (decl_fun.fun_name).id in
     let formals = convert_list gamma2 (decl_fun.fun_formals) in
     let gamma3 = add_to_env gamma2 formals in
-    let block = convert_block gamma3 (decl_fun.fun_body) in
+    let fake_function = {
+        fun_typ = typ;
+        fun_name = name;
+        fun_formals = formals;
+        fun_body = ([], []);
+    }
+    in
+    let gamma4 = add_fun gamma3 fake_function in
+    let block = convert_block gamma4 (decl_fun.fun_body) in
     {
         fun_typ = typ;
         fun_name = name;
