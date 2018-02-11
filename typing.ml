@@ -16,21 +16,36 @@ type gamma_type = {
     ret_typ : typ;
 }
 
+let unique l =
+    let rec aux accu = function
+    | [] -> true
+    | t::q -> if (List.mem t accu) then false
+    else aux (t::accu) q
+    in aux [] l
+
 let add_structure gamma structure =
-{
-    variables = gamma.variables;
-    structs = structure::gamma.structs;
-    functions = gamma.functions;
-    ret_typ = gamma.ret_typ;
-}
+    let l = structure::gamma.structs in
+    if unique l then
+    {
+        variables = gamma.variables;
+        structs = l;
+        functions = gamma.functions;
+        ret_typ = gamma.ret_typ;
+    }
+    else
+        raise(Error("Twice the same structure"))
 
 let add_fun gamma decl_fun =
-{
-    variables = gamma.variables;
-    structs = gamma.structs;
-    functions = decl_fun::gamma.functions;
-    ret_typ = gamma.ret_typ;
-}
+    let l = decl_fun::gamma.functions in
+    if unique l then
+    {
+        variables = gamma.variables;
+        structs = gamma.structs;
+        functions = l;
+        ret_typ = gamma.ret_typ;
+    }
+    else
+        raise(Error("Twice the same function"))
 
 let create_env gamma decl_var_list : gamma_type =
 {
@@ -94,8 +109,15 @@ let convert_typ gamma = function
 let convert_decl_var gamma ((typ, ident): Ptree.decl_var) : decl_var =
     (convert_typ gamma typ, ident.id)
 
+let convert_list gamma (decl_var_list: Ptree.decl_var list) : decl_var list =
+    let l = List.map (convert_decl_var gamma) decl_var_list in
+    if unique (List.map snd l) then
+        l
+    else
+        raise(Error("Twice the same name of variable in list of declarations"))
+
 let rec convert_block gamma ((old_decl_var_list, stmt_list):Ptree.block) : block =
-    let decl_var_list = List.map (convert_decl_var gamma) old_decl_var_list in
+    let decl_var_list = convert_list gamma old_decl_var_list in
     let gamma1 = create_env gamma decl_var_list in
     let rec aux gamma2 =  function
     | [] -> []
@@ -219,7 +241,7 @@ let convert_function old_gamma (decl_fun: Ptree.decl_fun) : decl_fun =
     let typ = convert_typ old_gamma (decl_fun.fun_typ) in
     let gamma = set_ret_type old_gamma typ in
     let name = (decl_fun.fun_name).id in
-    let formals = List.map (convert_decl_var gamma) decl_fun.fun_formals in
+    let formals = convert_list gamma (decl_fun.fun_formals) in
     let block = convert_block gamma (decl_fun.fun_body) in
     {
         fun_typ = typ;
