@@ -140,7 +140,6 @@ and convert_stmt gamma (stmt: Ptree.stmt) : gamma_type * stmt =
         (new_gamma, Sexpr(new_expr))
     | Ptree.Sif(expr, stmt1, stmt2) -> 
         let (gamma1, new_expr) = convert_expr gamma expr in
-        (* TODO: check if statements same types? *)
         let (gamma2, new_stmt1) = convert_stmt gamma1 stmt1 in
         let (gamma3, new_stmt2) = convert_stmt gamma2 stmt2 in
         (gamma3, Sif(new_expr, new_stmt1, new_stmt2))
