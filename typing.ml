@@ -72,10 +72,10 @@ let set_ret_type gamma typ =
 }
 
 let create_expr typ expr_node =
-{
-	expr_typ = typ;
-	expr_node = expr_node;
-}
+	{
+		expr_typ = typ;
+		expr_node = expr_node;
+	}
 
 let compatible t1 t2 =
     match (t1, t2) with
@@ -83,6 +83,7 @@ let compatible t1 t2 =
     | (_, Ttypenull) -> true
     | (Tvoidstar, Tstructp(_)) -> true
     | (Tstructp(_), Tvoidstar) -> true
+    | (Tstructp(s1), Tstructp(s2)) -> s1.str_name = s2.str_name
     | _ -> t1 = t2
 
 let get_structure gamma str =
@@ -99,7 +100,7 @@ let get_typ_var gamma str =
 
 let get_field expr ident =
     match expr.expr_typ with
-    | Tstructp(structure) -> Hashtbl.find (structure.str_fields) ident 
+    | Tstructp(structure) -> Hashtbl.find (structure.str_fields) ident
     | _ -> raise(Error("Not a structure"))
 
 let get_fun gamma str =
@@ -152,10 +153,11 @@ and convert_stmt gamma (stmt: Ptree.stmt) : gamma_type * stmt =
         (gamma, Sblock(new_block))
     | Ptree.Sreturn(expr) ->
         let (new_gamma, new_expr) = convert_expr gamma expr in
-        (* TODO: check the type of return *)
-        (new_gamma, Sreturn(new_expr))
+		if (compatible new_expr.expr_typ gamma.ret_typ) then
+			(new_gamma, Sreturn(new_expr))
+		else
+			raise(Error("Wrong type of return"))
 and convert_expr (gamma: gamma_type) (expr: Ptree.expr) : gamma_type * expr =
-    (* print_string "CONVERT EXPR"; *)
     match expr.expr_node with
 	| Ptree.Econst(i) when i = 0l -> (gamma, create_expr Ttypenull (Econst(0l)))
 	| Ptree.Econst(i) -> (gamma, create_expr Tint (Econst(0l)))
@@ -165,11 +167,12 @@ and convert_expr (gamma: gamma_type) (expr: Ptree.expr) : gamma_type * expr =
             | Ptree.Lident(ident) ->
                 let str = ident.id in
                 let typ = get_typ_var gamma str in
-                (gamma, create_expr typ (Eaccess_local(ident.id)))
+				(gamma, create_expr typ (Eaccess_local(ident.id)))
             | Ptree.Larrow(expr1, ident1) ->
                 let (new_gamma, new_expr) = convert_expr gamma expr1 in
                 let field = get_field new_expr (ident1.id) in
-                (new_gamma, create_expr field.field_typ (Eaccess_field(new_expr, field)))
+				let a = Eaccess_field(new_expr, field) in
+				(new_gamma, create_expr field.field_typ (a))
         end
     | Ptree.Eassign(lv, expr) ->
         let (new_gamma, big_expr) = convert_expr gamma expr in
@@ -221,11 +224,11 @@ and convert_expr (gamma: gamma_type) (expr: Ptree.expr) : gamma_type * expr =
                     let (temp_gamma, new_expr) = convert_expr (!new_gamma) expr in
                     new_gamma := temp_gamma;
                     if compatible typ (new_expr.expr_typ) then
-                        new_expr::(aux q1 q2)
+						new_expr::(aux q1 q2)
                     else
                         raise(Error("Argument not the right type"))
                 | _ -> raise(Error("Mismatch in the number of arguments"))
-            in  (!new_gamma, create_expr (f.fun_typ) (Ecall(ident.id, aux expl (f.fun_formals))))
+            in (!new_gamma, create_expr (f.fun_typ) (Ecall(ident.id, aux expl (f.fun_formals))))
         end
     | Esizeof(ident) ->
         let s = get_structure gamma (ident.id) in
