@@ -47,7 +47,7 @@ let rec stmt (s: Ttree.stmt) destl retr exitl : instr =
 let deffun (f: Ttree.decl_fun) exit_label : deffun =
     local_variables := Hashtbl.create 17;
     let (list_decl_var, list_stmts) = f.fun_body in
-    let list_args = List.map (fun x -> Register.fresh ()) (f.fun_formals) in
+    let list_args = List.map (fun x -> Register.fresh ()) (f.fun_formals) in (* TODO *)
     let r = Register.fresh() in
     let create_local_variable ((_, ident): Ttree.decl_var) =
         Hashtbl.add (!local_variables) ident (Register.fresh ())
