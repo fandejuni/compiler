@@ -12,19 +12,38 @@ let generate i =
 let rec expr (e: Ttree.expr) destrl destl : instr =
     match e.expr_node with
     | Ttree.Econst(i) -> Econst(i, destrl, destl)
-    | Ttree.Ebinop(binop, e1, e2) ->
+    | Ttree.Ebinop(binop, e1, e2) ->let r1 = Register.fresh () in 
         begin
+            let i_op = 
             match binop with
-            | Ptree.Badd ->
-                let r1 = Register.fresh () in
-                let i_op = Embinop(Madd, r1, destrl, destl) in
-                let l_op = generate i_op in
-                let i2 = expr e2 destrl l_op in
-                let l2 = generate i2 in
-                let i1 = expr e1 r1 l2 in
-                i1
+            | Ptree.Beq -> Embinop(Msete, r1, destrl, destl)
+            | Ptree.Bneq-> Embinop(Msetne, r1, destrl, destl)
+            | Ptree.Blt -> Embinop(Msetl, r1, destrl, destl)
+            | Ptree.Ble -> Embinop(Msetle, r1, destrl, destl)
+            | Ptree.Bgt -> Embinop(Msetg, r1, destrl, destl)
+            | Ptree.Bge -> Embinop(Msetge, r1, destrl, destl)
+            | Ptree.Badd -> Embinop(Madd, r1, destrl, destl)
+            | Ptree.Bsub -> Embinop(Msub, r1, destrl, destl)
+            | Ptree.Bmul -> Embinop(Mmul, r1, destrl, destl)
+            | Ptree.Bdiv -> Embinop(Mdiv, r1, destrl, destl)
             | _ -> raise(Error("Unknown operation"))
+            in
+            let l_op = generate i_op in
+            let i2 = expr e1 destrl l_op in
+            let l2 = generate i2 in
+            let i1 = expr e2 r1 l2 in
+            i1
         end
+    | Ttree.Eunop(Unot,e1) -> let i_op = Emunop(Msetei(0l),destrl,destl) in
+    let l_op = generate i_op in
+    expr e1 destrl l_op    
+    | Ttree.Eunop(Uminus,e1) ->
+        let r1 = Register.fresh () in 
+        let i_op = Embinop(Msub, r1, destrl, destl) in
+        let l_op = generate i_op in
+        let l2 = generate (Econst(0l,destrl, l_op)) in 
+        let i1 = expr e1 r1 l2 in
+            i1
     | _ -> raise(Error("Unknown type of expression"))
 
 let rec stmt (s: Ttree.stmt) destl retr exitl : instr =

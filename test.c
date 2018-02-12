@@ -1,3 +1,3 @@
 int main() {
-    return 40+2;
+    return !(2>=1) ;
 }
