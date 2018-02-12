@@ -48,7 +48,7 @@ let () =
     let p = Parser.file Lexer.token buf in
     close_in f;
     if !parse_only then exit 0;
-    let p = Typing.program ~debug p in
+    let p = Typing.program p in
     if !type_only then exit 0;
     let p = Rtl.program p in
     if debug then Rtltree.print_file std_formatter p;
