@@ -62,7 +62,12 @@ let rec stmt (s: Ttree.stmt) destl retr exitl : instr =
     | Ttree.Sblock(block) -> raise(Error("Block"))
     | Ttree.Sskip -> raise(Error("Skip"))
     | Ttree.Sexpr(e) -> expr e retr destl
-    | Ttree.Sif(e, s1, s2) -> raise(Error("Sif"))
+    | Ttree.Sif(e, s1, s2) -> 
+    let l1 = generate (stmt s1 destl retr exitl) in
+    let l2 = generate (stmt s1 destl retr exitl) in
+    let i_op = Emubranch(Mjz,retr,l1,l2) in 
+    let l_op = generate i_op in 
+    expr e retr l_op
     | Ttree.Swhile(e, s) -> raise(Error("While"))
 
 let deffun (f: Ttree.decl_fun) exit_label : deffun =
