@@ -159,7 +159,7 @@ and convert_stmt gamma (stmt: Ptree.stmt) : gamma_type * stmt =
 and convert_expr (gamma: gamma_type) (expr: Ptree.expr) : gamma_type * expr =
     match expr.expr_node with
 	| Ptree.Econst(i) when i = 0l -> (gamma, create_expr Ttypenull (Econst(0l)))
-	| Ptree.Econst(i) -> (gamma, create_expr Tint (Econst(0l)))
+	| Ptree.Econst(i) -> (gamma, create_expr Tint (Econst(i)))
     | Ptree.Eright(lv) ->
         begin
             match lv with
