@@ -62,7 +62,8 @@ let rec stmt (s: Ttree.stmt) destl retr exitl : instr =
     | Ttree.Sblock(block) -> raise(Error("Block"))
     | Ttree.Sskip -> raise(Error("Skip"))
     | Ttree.Sexpr(e) -> expr e retr destl
-    | _ -> raise(Error("Unknown statement"))
+    | Ttree.Sif(e, s1, s2) -> raise(Error("Sif"))
+    | Ttree.Swhile(e, s) -> raise(Error("While"))
 
 let deffun (f: Ttree.decl_fun) exit_label : deffun =
     local_variables := Hashtbl.create 17;
