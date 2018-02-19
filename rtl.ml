@@ -99,7 +99,18 @@ and expr (e: Ttree.expr) destrl ?truel destl: instr =
         in
         List.iter iter l2;
         Label.M.find !current_label !graph
-    | Ttree.Eaccess_field(_, _) -> raise(Error("Eaccess_field"))
+    | Ttree.Eaccess_field(e, f) -> 
+    begin 
+        let reg_e = fresh_register () in
+        
+        let i_load = match e.expr_typ with
+        |Tstructp(s) -> let pos = (Hashtbl.find (s.str_fields) (f.field_name)).position in
+            Eload(reg_e,pos,destrl,destl)
+        |_ -> raise (Error "accessing a field of a non struct") 
+        in
+        let l_load = generate i_load in 
+        expr e reg_e l_load
+    end
     | Ttree.Eassign_field(_, _, _) -> raise(Error("Eassign_field"))
     | Ttree.Esizeof(s) -> let i = Int32.of_int (8 * Hashtbl.length (s.str_fields)) in
         Econst(i, destrl, destl)
