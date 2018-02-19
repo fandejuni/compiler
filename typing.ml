@@ -237,6 +237,7 @@ let fake_structure =
     {
         str_name = "structure_non_existent_for_recursive_purposes";
         str_fields = Hashtbl.create 0;
+        size = 0
     }
 
 let purify_structure structure =
@@ -247,6 +248,7 @@ let purify_structure structure =
                 Hashtbl.replace structure.str_fields ident {
                     field_name = field.field_name;
                     field_typ = Tstructp(structure);
+                    position = field.position;
                 }
         | _ -> ()
     in
@@ -254,14 +256,14 @@ let purify_structure structure =
 
 let execute_structure gamma ((ident, decl_var_list):Ptree.decl_struct) : structure  =
     let table = Hashtbl.create 17 in
-    let rec aux (l: Ptree.decl_var list) =
+    let rec aux (l: Ptree.decl_var list) pos =
         match l with
         | [] -> ()
         | (Ptree.Tint, small_ident)::q ->
             if Hashtbl.mem table (small_ident.id) then
                 raise(Error("Twice the same name of field in structure"))
             else
-                Hashtbl.add table small_ident.id {field_name = small_ident.id; field_typ = Tint}; aux q
+                Hashtbl.add table small_ident.id {position = pos * 8; field_name = small_ident.id; field_typ = Tint}; aux q (pos + 1)
         | (Ptree.Tstructp(other_ident), small_ident)::q ->
             if Hashtbl.mem table (small_ident.id) then
                 raise(Error("Twice the same name of field in structure"))
@@ -269,11 +271,12 @@ let execute_structure gamma ((ident, decl_var_list):Ptree.decl_struct) : structu
                 let s =
                     if other_ident.id = (ident.id) then fake_structure
                     else get_structure gamma (other_ident.id)
-                in Hashtbl.add table small_ident.id {field_name = small_ident.id; field_typ = Tstructp(s)}; aux q
-    in aux decl_var_list;
+                in Hashtbl.add table small_ident.id {position = pos * 8; field_name = small_ident.id; field_typ = Tstructp(s)}; aux q (pos + 1)
+    in aux decl_var_list 0;
     let s = {
         str_name = ident.id;
         str_fields = table;
+        size = (List.length decl_var_list) * 8;
     } in
     purify_structure s;
     s
