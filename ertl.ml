@@ -44,7 +44,10 @@ let instr = function
       |([],reg::t) -> 
             let l = (generate (load_param instr ([],t))) in Epush_param(reg,l)
       in 
-      let i_ecall= ( Ecall(fid,nargs,exitl)) in 
+      let n = (List.length args) - nargs in
+      let l_depiler = generate (Emunop(Maddi(Int32.of_int (-n)), Register.rsp, exitl)) in
+      let l_mov_result = generate (Embinop(Mmov, Register.result, r, l_depiler)) in
+      let i_ecall= ( Ecall(fid,nargs,l_mov_result)) in 
       load_param i_ecall (Register.parameters,args)
     end
 
