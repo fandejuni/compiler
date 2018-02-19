@@ -56,26 +56,31 @@ let rec expr (e: Ttree.expr) destrl destl : instr =
             i1
     | _ -> raise(Error("Unknown type of expression"))
 
-let rec stmt (s: Ttree.stmt) destl retr exitl : instr =
-    match s with
-    | Ttree.Sreturn(e) -> expr e retr exitl
-    | Ttree.Sblock(block) -> raise(Error("Block"))
-    | Ttree.Sskip -> Egoto(destl)
-    | Ttree.Sexpr(e) -> expr e retr destl
-    | Ttree.Sif(e, s1, s2) -> 
-    let l1 = generate (stmt s1 destl retr exitl) in
-    let l2 = generate (stmt s1 destl retr exitl) in
-    let i_op = Emubranch(Mjz,retr,l1,l2) in 
+let couple e =
+    (generate e, e)
+
+let rec condition e truel falsel retr =
+    let r = Register.fresh () in
+    let i_op = Emubranch(Mjz, r, truel, falsel) in 
     let l_op = generate i_op in 
-    expr e retr l_op
+    couple (expr e retr l_op)
+and stmt (s: Ttree.stmt) destl retr exitl : label * instr =
+    match s with
+    | Ttree.Sreturn(e) -> couple (expr e retr exitl)
+    | Ttree.Sblock(block) -> raise(Error("Block"))
+    | Ttree.Sskip -> couple (Egoto(destl))
+    | Ttree.Sexpr(e) -> couple (expr e retr destl)
+    | Ttree.Sif(e, s1, s2) -> 
+        let (l1, _) = stmt s1 destl retr exitl in
+        let (l2, _) = stmt s2 destl retr exitl in
+        condition e l1 l2 retr
     | Ttree.Swhile(old_e, old_s) ->
         let end_loop_label = Label.fresh () in
-        let i_s = stmt old_s end_loop_label retr exitl in
-        let label_s = generate i_s in
-        let r = Register.fresh () in
-        let i_expr = expr old_e r label_s in
-        let label_expr = generate i_expr in
-        (* TODO *)
+        let (label_s, i_s) = stmt old_s end_loop_label retr exitl in
+        let (label_e, e) = condition old_e label_s destl retr in
+        let goto = Egoto(label_e) in
+        graph := Label.M.add end_loop_label goto !graph;
+        (label_e, e)
 
 let deffun (f: Ttree.decl_fun) exit_label : deffun =
     local_variables := Hashtbl.create 17;
@@ -88,8 +93,8 @@ let deffun (f: Ttree.decl_fun) exit_label : deffun =
     List.iter create_local_variable list_decl_var;
     let current_label = ref exit_label in
     let treat_stmt (var_stmt: Ttree.stmt) : unit =
-        let i = stmt var_stmt (!current_label) r exit_label in
-        current_label := generate i
+        let (lab, i) = stmt var_stmt (!current_label) r exit_label in
+        current_label := lab
     in
     let stmt_reversed = List.rev list_stmts in
     List.iter treat_stmt stmt_reversed;
