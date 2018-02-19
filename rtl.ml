@@ -21,7 +21,7 @@ let couple e =
 
 let rec condition e truel falsel retr =
     let r = fresh_register () in
-    let i_op = Emubranch(Mjz, r, truel, falsel) in 
+    let i_op = Emubranch(Mjz, r, falsel, truel) in 
     let l_op = generate i_op in 
     expr e r ?truel:(Some truel) l_op
 and expr (e: Ttree.expr) destrl ?truel destl: instr =
@@ -101,7 +101,8 @@ and expr (e: Ttree.expr) destrl ?truel destl: instr =
         Label.M.find !current_label !graph
     | Ttree.Eaccess_field(_, _) -> raise(Error("Eaccess_field"))
     | Ttree.Eassign_field(_, _, _) -> raise(Error("Eassign_field"))
-    | Ttree.Esizeof(_) -> raise(Error("Esizeof"))
+    | Ttree.Esizeof(s) -> let i = Int32.of_int (8 * Hashtbl.length (s.str_fields)) in
+        Econst(i, destrl, destl)
 
 let create_local_variable ((_, ident): Ttree.decl_var) r =
     Hashtbl.add (!local_variables) ident r
@@ -123,7 +124,7 @@ and stmt (s: Ttree.stmt) destl retr exitl : label * instr =
     | Ttree.Sreturn(e) -> couple (expr e retr exitl)
     | Ttree.Sblock(list_decl_var, list_stmts) ->
         let _ = generate_local_variables list_decl_var in
-        let current_label = generate_stmt retr exitl list_stmts in
+        let current_label = generate_stmt retr destl list_stmts in
         (current_label, Label.M.find current_label !graph)
     | Ttree.Sskip -> couple (Egoto(destl))
     | Ttree.Sexpr(e) -> couple (expr e retr destl)
