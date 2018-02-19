@@ -23,8 +23,8 @@ let rec condition e truel falsel retr =
     let r = fresh_register () in
     let i_op = Emubranch(Mjz, r, falsel, truel) in 
     let l_op = generate i_op in 
-    expr e r ?truel:(Some truel) l_op
-and expr (e: Ttree.expr) destrl ?truel destl: instr =
+    expr e r l_op
+and expr (e: Ttree.expr) destrl destl: instr =
     match e.expr_node with
     | Ttree.Econst(i) ->
         Econst(i, destrl, destl)
@@ -60,22 +60,16 @@ and expr (e: Ttree.expr) destrl ?truel destl: instr =
                 let i1 = expr e2 r1 l2 in
                 i1
             end
-            | _ ->
-                begin
-                let truelabel = 
-                match truel with
-                | Some x -> x
-                | _ -> raise(Error("No true branch specified (lazy)"))
-                in
-                match binop with
-                | Ptree.Band ->
-                    let (lab2, exp2) = couple (condition e2 truelabel destl destrl) in
-                    condition e1 lab2 destl destrl
-                | Ptree.Bor ->
-                    let (lab2, exp2) = couple (condition e2 truelabel destl destrl) in
-                    condition e1 truelabel lab2 destrl
-                | _ -> raise(Error("This shouldn't happen"))
-                end
+            | Ptree.Band ->
+                let (l_vrai, _) = couple (Econst(1l, destrl, destl)) in
+                let (l_faux, _) = couple (Econst(0l, destrl, destl)) in
+                let (l_b, _) = couple (condition e2 l_vrai l_faux destrl) in
+                condition e1 l_b l_faux destrl
+            | Ptree.Bor ->
+                let (l_vrai, _) = couple (Econst(1l, destrl, destl)) in
+                let (l_faux, _) = couple (Econst(0l, destrl, destl)) in
+                let (l_b, _) = couple (condition e2 l_vrai l_faux destrl) in
+                condition e1 l_vrai l_b destrl
         end
     | Ttree.Eunop(Unot,e1) -> let i_op = Emunop(Msetei(0l),destrl,destl) in
     let l_op = generate i_op in
