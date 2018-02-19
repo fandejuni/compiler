@@ -7,19 +7,6 @@ let param_reg = List.length Register.parameters
 let caller_saved = List.length Register.caller_saved
 let callee_saved = List.length Register.callee_saved
 
-let save_ecall = function
-    |Rtltree.Ecall (r,fid,args,exitl) -> 
-        begin 
-            let nargs= min(6,List.length args) in
-            let rec load_param destl= function 
-            |(_,[])-> destl
-            |(paramr::q, reg::t) -> let l = (generate Embinop(Mmov,reg, paramr )) in 
-                (load_param l q t)
-            |([],rargs) -> raise( Remaining_args rargs)
-        in try load_param exitl Register.parameters args with
-        |Remaining_args(rargs) -> store_stack (rargs)
-        end
-    |_ -> raise (Error "pas une fonction a garder")
 
 let graph = ref Label.M.empty
 
@@ -47,7 +34,19 @@ let instr = function
   | Rtltree.Emubranch(mu, r, l1, l2) -> Emubranch(mu, r, l1, l2)
   | Rtltree.Embbranch(mb, r1, r2, l1, l2) -> Embbranch(mb, r1, r2, l1, l2)
   | Rtltree.Egoto(l) -> Egoto(l)
-  | Rtltree.Ecall(r, ident, r_list, l) -> raise(Error("ECALL"))
+  | Rtltree.Ecall (r,fid,args,exitl) -> 
+    begin 
+      let nargs= min 6 (List.length args) in
+      let rec load_param instr = function 
+      |(_,[])-> instr
+      |(paramr::q, reg::t) -> let l = (generate (load_param instr (q,t))) in 
+        Embinop(Mmov,reg, paramr,l)
+      |([],reg::t) -> 
+            let l = (generate (load_param instr ([],t))) in Epush_param(reg,l)
+      in 
+      let i_ecall= ( Ecall(fid,nargs,exitl)) in 
+      load_param i_ecall (Register.parameters,args)
+    end
 
 let convert_cfg cfg =
     let rec aux label i =
