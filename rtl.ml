@@ -3,7 +3,7 @@ open Rtltree
 exception Error of string
 
 let graph = ref Label.M.empty
-let local_variables = ref (Hashtbl.create 0)
+let local_variables = ref (Hashtbl.create 17)
 
 let generate i =
     let l = Label.fresh () in
@@ -60,7 +60,7 @@ and expr (e: Ttree.expr) destrl ?truel destl: instr =
                 let truelabel = 
                 match truel with
                 | Some x -> x
-                | _ -> raise(Error("Bad condition"))
+                | _ -> raise(Error("No true branch specified (lazy)"))
                 in
                 match binop with
                 | Ptree.Band ->
@@ -82,6 +82,18 @@ and expr (e: Ttree.expr) destrl ?truel destl: instr =
         let l2 = generate (Econst(0l,destrl, l_op)) in 
         let i1 = expr e1 r1 l2 in
             i1
+    | Ttree.Ecall(ident, expl) ->
+        let l = List.map (fun x -> (x, Register.fresh ())) expl in
+        let call = Ecall(destrl, ident, (List.map snd l), destl) in
+        let l_call = generate call in
+        let l2 = List.rev l in
+        let current_label = ref l_call in
+        let iter (old_e, r) =
+            let e = expr old_e r !current_label in
+            current_label := generate e;
+        in
+        List.iter iter l2;
+        Label.M.find !current_label !graph
     | _ -> raise(Error("Unknown type of expression"))
 
 let rec stmt (s: Ttree.stmt) destl retr exitl : label * instr =
@@ -103,14 +115,14 @@ let rec stmt (s: Ttree.stmt) destl retr exitl : label * instr =
         (label_e, e)
 
 let deffun (f: Ttree.decl_fun) exit_label : deffun =
-    local_variables := Hashtbl.create 17;
+    Hashtbl.clear !local_variables;
     let (list_decl_var, list_stmts) = f.fun_body in
-    let list_args = List.map (fun x -> Register.fresh ()) (f.fun_formals) in (* TODO *)
-    let r = Register.fresh() in
-    let create_local_variable ((_, ident): Ttree.decl_var) =
-        Hashtbl.add (!local_variables) ident (Register.fresh ())
+    let create_local_variable ((_, ident): Ttree.decl_var) r =
+        Hashtbl.add (!local_variables) ident r
     in
-    List.iter create_local_variable list_decl_var;
+    let list_args = List.map (fun x -> let r = Register.fresh () in create_local_variable x r; r) (f.fun_formals) in
+    let r = Register.fresh() in
+    List.iter (fun x -> create_local_variable x (Register.fresh ())) list_decl_var;
     let current_label = ref exit_label in
     let treat_stmt (var_stmt: Ttree.stmt) : unit =
         let (lab, i) = stmt var_stmt (!current_label) r exit_label in
