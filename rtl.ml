@@ -10,7 +10,15 @@ let generate i =
     graph := Label.M.add l i !graph;
     l
 
-let rec expr (e: Ttree.expr) destrl destl : instr =
+let couple e =
+    (generate e, e)
+
+let rec condition e truel falsel retr =
+    let r = Register.fresh () in
+    let i_op = Emubranch(Mjz, r, truel, falsel) in 
+    let l_op = generate i_op in 
+    expr e retr ?truel:(Some truel) l_op
+and expr (e: Ttree.expr) destrl ?truel destl: instr =
     match e.expr_node with
     | Ttree.Econst(i) -> Econst(i, destrl, destl)
     | Ttree.Eaccess_local(ident) ->
@@ -24,25 +32,45 @@ let rec expr (e: Ttree.expr) destrl destl : instr =
         expr e r_right l_assign
     | Ttree.Ebinop(binop, e1, e2) -> let r1 = Register.fresh () in 
         begin
-            let i_op = 
             match binop with
-            | Ptree.Beq -> Embinop(Msete, r1, destrl, destl)
-            | Ptree.Bneq-> Embinop(Msetne, r1, destrl, destl)
-            | Ptree.Blt -> Embinop(Msetl, r1, destrl, destl)
-            | Ptree.Ble -> Embinop(Msetle, r1, destrl, destl)
-            | Ptree.Bgt -> Embinop(Msetg, r1, destrl, destl)
-            | Ptree.Bge -> Embinop(Msetge, r1, destrl, destl)
-            | Ptree.Badd -> Embinop(Madd, r1, destrl, destl)
-            | Ptree.Bsub -> Embinop(Msub, r1, destrl, destl)
-            | Ptree.Bmul -> Embinop(Mmul, r1, destrl, destl)
-            | Ptree.Bdiv -> Embinop(Mdiv, r1, destrl, destl)
-            | _ -> raise(Error("Unknown operation"))
-            in
-            let l_op = generate i_op in
-            let i2 = expr e1 destrl l_op in
-            let l2 = generate i2 in
-            let i1 = expr e2 r1 l2 in
-            i1
+            | Ptree.Beq | Ptree.Bneq | Ptree.Blt | Ptree.Ble | Ptree.Bgt | Ptree.Bge | Ptree.Badd | Ptree.Bsub | Ptree.Bmul | Ptree.Bdiv ->
+            begin
+                let i_op = 
+                match binop with
+                | Ptree.Beq -> Embinop(Msete, r1, destrl, destl)
+                | Ptree.Bneq-> Embinop(Msetne, r1, destrl, destl)
+                | Ptree.Blt -> Embinop(Msetl, r1, destrl, destl)
+                | Ptree.Ble -> Embinop(Msetle, r1, destrl, destl)
+                | Ptree.Bgt -> Embinop(Msetg, r1, destrl, destl)
+                | Ptree.Bge -> Embinop(Msetge, r1, destrl, destl)
+                | Ptree.Badd -> Embinop(Madd, r1, destrl, destl)
+                | Ptree.Bsub -> Embinop(Msub, r1, destrl, destl)
+                | Ptree.Bmul -> Embinop(Mmul, r1, destrl, destl)
+                | Ptree.Bdiv -> Embinop(Mdiv, r1, destrl, destl)
+                | _ -> raise(Error("This shouldn't happen"))
+                in
+                let l_op = generate i_op in
+                let i2 = expr e1 destrl l_op in
+                let l2 = generate i2 in
+                let i1 = expr e2 r1 l2 in
+                i1
+            end
+            | _ ->
+                begin
+                let truelabel = 
+                match truel with
+                | Some x -> x
+                | _ -> raise(Error("Bad condition"))
+                in
+                match binop with
+                | Ptree.Band ->
+                    let (lab2, exp2) = couple (condition e2 truelabel destl destrl) in
+                    condition e1 lab2 destl destrl
+                | Ptree.Bor ->
+                    let (lab2, exp2) = couple (condition e2 truelabel destl destrl) in
+                    condition e1 truelabel lab2 destrl
+                | _ -> raise(Error("This shouldn't happen"))
+                end
         end
     | Ttree.Eunop(Unot,e1) -> let i_op = Emunop(Msetei(0l),destrl,destl) in
     let l_op = generate i_op in
@@ -56,15 +84,7 @@ let rec expr (e: Ttree.expr) destrl destl : instr =
             i1
     | _ -> raise(Error("Unknown type of expression"))
 
-let couple e =
-    (generate e, e)
-
-let rec condition e truel falsel retr =
-    let r = Register.fresh () in
-    let i_op = Emubranch(Mjz, r, truel, falsel) in 
-    let l_op = generate i_op in 
-    couple (expr e retr l_op)
-and stmt (s: Ttree.stmt) destl retr exitl : label * instr =
+let rec stmt (s: Ttree.stmt) destl retr exitl : label * instr =
     match s with
     | Ttree.Sreturn(e) -> couple (expr e retr exitl)
     | Ttree.Sblock(block) -> raise(Error("Block"))
@@ -73,11 +93,11 @@ and stmt (s: Ttree.stmt) destl retr exitl : label * instr =
     | Ttree.Sif(e, s1, s2) -> 
         let (l1, _) = stmt s1 destl retr exitl in
         let (l2, _) = stmt s2 destl retr exitl in
-        condition e l1 l2 retr
+        couple (condition e l1 l2 retr)
     | Ttree.Swhile(old_e, old_s) ->
         let end_loop_label = Label.fresh () in
         let (label_s, i_s) = stmt old_s end_loop_label retr exitl in
-        let (label_e, e) = condition old_e label_s destl retr in
+        let (label_e, e) = couple (condition old_e label_s destl retr) in
         let goto = Egoto(label_e) in
         graph := Label.M.add end_loop_label goto !graph;
         (label_e, e)
