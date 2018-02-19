@@ -94,7 +94,7 @@ and expr (e: Ttree.expr) destrl destl: instr =
         List.iter iter l2;
         Label.M.find !current_label !graph
     | Ttree.Eaccess_field(_, _) -> raise(Error("Eaccess_field"))
-    | Ttree.Eassign_field(_, _, _) -> raise(Error("Eassign_field"))
+    | Ttree.Eassign_field(e1, f, e2) ->
     | Ttree.Esizeof(s) -> let i = Int32.of_int (8 * Hashtbl.length (s.str_fields)) in
         Econst(i, destrl, destl)
 
