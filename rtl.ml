@@ -100,7 +100,9 @@ and expr (e: Ttree.expr) destrl ?truel destl: instr =
         in
         List.iter iter l2;
         Label.M.find !current_label !graph
-    | _ -> raise(Error("Unknown type of expression"))
+    | Ttree.Eaccess_field(_, _) -> raise(Error("Eaccess_field"))
+    | Ttree.Eassign_field(_, _, _) -> raise(Error("Eassign_field"))
+    | Ttree.Esizeof(_) -> raise(Error("Esizeof"))
 
 let create_local_variable ((_, ident): Ttree.decl_var) r =
     Hashtbl.add (!local_variables) ident r
