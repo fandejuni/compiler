@@ -96,7 +96,6 @@ and expr (e: Ttree.expr) destrl destl: instr =
     | Ttree.Eaccess_field(e, f) -> 
     begin 
         let reg_e = fresh_register () in
-        
         let i_load = match e.expr_typ with
         |Tstructp(s) -> let pos = (Hashtbl.find (s.str_fields) (f.field_name)).position in
             Eload(reg_e,pos,destrl,destl)
@@ -105,7 +104,18 @@ and expr (e: Ttree.expr) destrl destl: instr =
         let l_load = generate i_load in 
         expr e reg_e l_load
     end
-    | Ttree.Eassign_field(_, _, _) -> raise(Error("Eassign_field"))
+    | Ttree.Eassign_field(e1, f, e2) ->
+    begin 
+        let reg_e = fresh_register () in
+        let i_load = match e1.expr_typ with
+        |Tstructp(s) -> let pos = (Hashtbl.find (s.str_fields) (f.field_name)).position in
+            Estore(destrl, reg_e, pos, destl)
+        |_ -> raise (Error "accessing a field of a non struct") 
+        in
+        let l_load = generate i_load in 
+        let (label_struct, _) = couple (expr e1 reg_e l_load) in
+        expr e2 destrl label_struct
+    end
     | Ttree.Esizeof(s) -> let i = Int32.of_int (8 * Hashtbl.length (s.str_fields)) in
         Econst(i, destrl, destl)
 
