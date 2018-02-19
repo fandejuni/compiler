@@ -96,10 +96,28 @@ and expr (e: Ttree.expr) destrl ?truel destl: instr =
         Label.M.find !current_label !graph
     | _ -> raise(Error("Unknown type of expression"))
 
-let rec stmt (s: Ttree.stmt) destl retr exitl : label * instr =
+let create_local_variable ((_, ident): Ttree.decl_var) r =
+    Hashtbl.add (!local_variables) ident r
+
+let generate_local_variables list_decl_var =
+    List.iter (fun x -> create_local_variable x (Register.fresh ())) list_decl_var
+
+let rec generate_stmt r exit_label list_stmts =
+    let current_label = ref exit_label in
+    let treat_stmt (var_stmt: Ttree.stmt) : unit =
+        let (lab, i) = stmt var_stmt (!current_label) r exit_label in
+        current_label := lab
+    in
+    let stmt_reversed = List.rev list_stmts in
+    List.iter treat_stmt stmt_reversed;
+    !current_label
+and stmt (s: Ttree.stmt) destl retr exitl : label * instr =
     match s with
     | Ttree.Sreturn(e) -> couple (expr e retr exitl)
-    | Ttree.Sblock(block) -> raise(Error("Block"))
+    | Ttree.Sblock(list_decl_var, list_stmts) ->
+        generate_local_variables list_decl_var;
+        let current_label = generate_stmt retr exitl list_stmts in
+        (current_label, Label.M.find current_label !graph)
     | Ttree.Sskip -> couple (Egoto(destl))
     | Ttree.Sexpr(e) -> couple (expr e retr destl)
     | Ttree.Sif(e, s1, s2) -> 
@@ -117,25 +135,16 @@ let rec stmt (s: Ttree.stmt) destl retr exitl : label * instr =
 let deffun (f: Ttree.decl_fun) exit_label : deffun =
     Hashtbl.clear !local_variables;
     let (list_decl_var, list_stmts) = f.fun_body in
-    let create_local_variable ((_, ident): Ttree.decl_var) r =
-        Hashtbl.add (!local_variables) ident r
-    in
     let list_args = List.map (fun x -> let r = Register.fresh () in create_local_variable x r; r) (f.fun_formals) in
     let r = Register.fresh() in
-    List.iter (fun x -> create_local_variable x (Register.fresh ())) list_decl_var;
-    let current_label = ref exit_label in
-    let treat_stmt (var_stmt: Ttree.stmt) : unit =
-        let (lab, i) = stmt var_stmt (!current_label) r exit_label in
-        current_label := lab
-    in
-    let stmt_reversed = List.rev list_stmts in
-    List.iter treat_stmt stmt_reversed;
-    {
+    generate_local_variables list_decl_var;
+    let current_label = generate_stmt r exit_label list_stmts in
+   {
         fun_name = f.fun_name;
         fun_formals = list_args;
         fun_result = r;
         fun_locals = Register.S.empty;
-        fun_entry = !current_label;
+        fun_entry = current_label;
         fun_exit = exit_label;
         fun_body = !graph;
     }
