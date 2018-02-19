@@ -13,7 +13,6 @@ let generate i =
 
 let fresh_register () =
     let r = Register.fresh () in
-    print_string "Adding register\n";
     current_locals := Register.S.add r !current_locals;
     r
 
@@ -146,6 +145,8 @@ let deffun (f: Ttree.decl_fun) exit_label : deffun =
     let r = Register.fresh() in
     let locals = generate_local_variables list_decl_var in
     current_locals := List.fold_left (fun s x -> Register.S.add x s) Register.S.empty locals;
+    (* current_locals := List.fold_left (fun s x -> Register.S.add x s) !current_locals list_args;
+    current_locals := Register.S.add r !current_locals; *)
     let current_label = generate_stmt r exit_label list_stmts in
    {
         fun_name = f.fun_name;
