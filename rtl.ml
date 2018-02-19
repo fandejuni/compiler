@@ -60,10 +60,17 @@ let rec stmt (s: Ttree.stmt) destl retr exitl : instr =
     match s with
     | Ttree.Sreturn(e) -> expr e retr exitl
     | Ttree.Sblock(block) -> raise(Error("Block"))
-    | Ttree.Sskip -> raise(Error("Skip"))
+    | Ttree.Sskip -> Egoto(destl)
     | Ttree.Sexpr(e) -> expr e retr destl
     | Ttree.Sif(e, s1, s2) -> raise(Error("Sif"))
-    | Ttree.Swhile(e, s) -> raise(Error("While"))
+    | Ttree.Swhile(old_e, old_s) ->
+        let end_loop_label = Label.fresh () in
+        let i_s = stmt old_s end_loop_label retr exitl in
+        let label_s = generate i_s in
+        let r = Register.fresh () in
+        let i_expr = expr old_e r label_s in
+        let label_expr = generate i_expr in
+        
 
 let deffun (f: Ttree.decl_fun) exit_label : deffun =
     local_variables := Hashtbl.create 17;
