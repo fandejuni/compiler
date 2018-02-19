@@ -23,19 +23,18 @@ let rec condition e truel falsel retr =
     let r = fresh_register () in
     let i_op = Emubranch(Mjz, r, truel, falsel) in 
     let l_op = generate i_op in 
-    expr e retr ?truel:(Some truel) l_op
+    expr e r ?truel:(Some truel) l_op
 and expr (e: Ttree.expr) destrl ?truel destl: instr =
     match e.expr_node with
-    | Ttree.Econst(i) -> Econst(i, destrl, destl)
+    | Ttree.Econst(i) ->
+        Econst(i, destrl, destl)
     | Ttree.Eaccess_local(ident) ->
         let r = Hashtbl.find (!local_variables) ident in
-        Eload(r, 0, destrl, destl)
+        Embinop(Mmov, r, destrl, destl)
     | Ttree.Eassign_local(ident, e) ->
         let r_left = Hashtbl.find (!local_variables) ident in
-        let r_right = fresh_register () in
-        let i_assign = Estore(r_right, r_left, 0, destl) in
-        let l_assign = generate i_assign in
-        expr e r_right l_assign
+        let (l_assign, i_assign) = couple (Embinop(Mmov, destrl, r_left, destl)) in
+        expr e destrl l_assign
     | Ttree.Ebinop(binop, e1, e2) -> let r1 = fresh_register () in 
         begin
             match binop with
@@ -80,7 +79,7 @@ and expr (e: Ttree.expr) destrl ?truel destl: instr =
         end
     | Ttree.Eunop(Unot,e1) -> let i_op = Emunop(Msetei(0l),destrl,destl) in
     let l_op = generate i_op in
-    expr e1 destrl l_op    
+    expr e1 destrl l_op
     | Ttree.Eunop(Uminus,e1) ->
         let r1 = fresh_register () in 
         let i_op = Embinop(Msub, r1, destrl, destl) in
@@ -166,6 +165,6 @@ let program (p: Ttree.file) : file =
         deffun decl_fun exit_label
     in
     {
-        funs = List.map aux (p.funs)
+        funs = List.map aux (List.filter (fun (f:Ttree.decl_fun) -> f.fun_name <> "sbrk" && f.fun_name <> "putchar") (p.funs))
     }
 
