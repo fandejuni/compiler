@@ -156,6 +156,7 @@ and stmt (s: Ttree.stmt) destl retr exitl : label * instr =
         (label_e, e)
 
 let deffun (f: Ttree.decl_fun) exit_label : deffun =
+    graph := Label.M.empty;
     Hashtbl.clear !local_variables;
     let (list_decl_var, list_stmts) = f.fun_body in
     let list_args = List.map (fun x -> let r = fresh_register () in create_local_variable x r; r) (f.fun_formals) in

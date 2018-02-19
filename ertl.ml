@@ -4,9 +4,12 @@ exception Error of string
 
 let graph = ref Label.M.empty
 
+let add_graph l i =
+    graph := Label.M.add l i !graph
+
 let generate i =
     let l = Label.fresh () in
-    graph := Label.M.add l i !graph;
+    add_graph l i;
     l
 
 let couple i =
@@ -27,5 +30,25 @@ let instr = function
   | Rtltree.Egoto(l) -> Egoto(l)
   | Rtltree.Ecall(r, ident, r_list, l) -> raise(Error("ECALL"))
 
+let convert_cfg cfg =
+    let rec aux label i =
+        add_graph label (instr i)
+    in
+    Label.M.iter aux cfg
+
+let deffun (f: Rtltree.deffun) =
+    graph := Label.M.empty;
+    add_graph f.fun_exit Ereturn;
+    convert_cfg f.fun_body;
+    {
+        fun_name = f.fun_name;
+        fun_formals = min 6 (List.length f.fun_formals);
+        fun_locals = f.fun_locals;
+        fun_entry = f.fun_entry;
+        fun_body = !graph;
+    }
+
 let program (file: Rtltree.file) = 
-    raise (Error "Not done yet")
+    {
+        funs = List.map deffun file.funs;
+    }
