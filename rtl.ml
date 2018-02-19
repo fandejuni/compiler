@@ -4,17 +4,24 @@ exception Error of string
 
 let graph = ref Label.M.empty
 let local_variables = ref (Hashtbl.create 17)
+let current_locals = ref Register.S.empty
 
 let generate i =
     let l = Label.fresh () in
     graph := Label.M.add l i !graph;
     l
 
+let fresh_register () =
+    let r = Register.fresh () in
+    print_string "Adding register\n";
+    current_locals := Register.S.add r !current_locals;
+    r
+
 let couple e =
     (generate e, e)
 
 let rec condition e truel falsel retr =
-    let r = Register.fresh () in
+    let r = fresh_register () in
     let i_op = Emubranch(Mjz, r, truel, falsel) in 
     let l_op = generate i_op in 
     expr e retr ?truel:(Some truel) l_op
@@ -26,11 +33,11 @@ and expr (e: Ttree.expr) destrl ?truel destl: instr =
         Eload(r, 0, destrl, destl)
     | Ttree.Eassign_local(ident, e) ->
         let r_left = Hashtbl.find (!local_variables) ident in
-        let r_right = Register.fresh () in
+        let r_right = fresh_register () in
         let i_assign = Estore(r_right, r_left, 0, destl) in
         let l_assign = generate i_assign in
         expr e r_right l_assign
-    | Ttree.Ebinop(binop, e1, e2) -> let r1 = Register.fresh () in 
+    | Ttree.Ebinop(binop, e1, e2) -> let r1 = fresh_register () in 
         begin
             match binop with
             | Ptree.Beq | Ptree.Bneq | Ptree.Blt | Ptree.Ble | Ptree.Bgt | Ptree.Bge | Ptree.Badd | Ptree.Bsub | Ptree.Bmul | Ptree.Bdiv ->
@@ -76,14 +83,14 @@ and expr (e: Ttree.expr) destrl ?truel destl: instr =
     let l_op = generate i_op in
     expr e1 destrl l_op    
     | Ttree.Eunop(Uminus,e1) ->
-        let r1 = Register.fresh () in 
+        let r1 = fresh_register () in 
         let i_op = Embinop(Msub, r1, destrl, destl) in
         let l_op = generate i_op in
         let l2 = generate (Econst(0l,destrl, l_op)) in 
         let i1 = expr e1 r1 l2 in
             i1
     | Ttree.Ecall(ident, expl) ->
-        let l = List.map (fun x -> (x, Register.fresh ())) expl in
+        let l = List.map (fun x -> (x, fresh_register ())) expl in
         let call = Ecall(destrl, ident, (List.map snd l), destl) in
         let l_call = generate call in
         let l2 = List.rev l in
@@ -100,7 +107,7 @@ let create_local_variable ((_, ident): Ttree.decl_var) r =
     Hashtbl.add (!local_variables) ident r
 
 let generate_local_variables list_decl_var =
-    List.iter (fun x -> create_local_variable x (Register.fresh ())) list_decl_var
+    List.map (fun x -> let r = fresh_register () in create_local_variable x r; r) list_decl_var
 
 let rec generate_stmt r exit_label list_stmts =
     let current_label = ref exit_label in
@@ -115,7 +122,7 @@ and stmt (s: Ttree.stmt) destl retr exitl : label * instr =
     match s with
     | Ttree.Sreturn(e) -> couple (expr e retr exitl)
     | Ttree.Sblock(list_decl_var, list_stmts) ->
-        generate_local_variables list_decl_var;
+        let _ = generate_local_variables list_decl_var in
         let current_label = generate_stmt retr exitl list_stmts in
         (current_label, Label.M.find current_label !graph)
     | Ttree.Sskip -> couple (Egoto(destl))
@@ -135,15 +142,16 @@ and stmt (s: Ttree.stmt) destl retr exitl : label * instr =
 let deffun (f: Ttree.decl_fun) exit_label : deffun =
     Hashtbl.clear !local_variables;
     let (list_decl_var, list_stmts) = f.fun_body in
-    let list_args = List.map (fun x -> let r = Register.fresh () in create_local_variable x r; r) (f.fun_formals) in
+    let list_args = List.map (fun x -> let r = fresh_register () in create_local_variable x r; r) (f.fun_formals) in
     let r = Register.fresh() in
-    generate_local_variables list_decl_var;
+    let locals = generate_local_variables list_decl_var in
+    current_locals := List.fold_left (fun s x -> Register.S.add x s) Register.S.empty locals;
     let current_label = generate_stmt r exit_label list_stmts in
    {
         fun_name = f.fun_name;
         fun_formals = list_args;
         fun_result = r;
-        fun_locals = Register.S.empty;
+        fun_locals = !current_locals;
         fun_entry = current_label;
         fun_exit = exit_label;
         fun_body = !graph;
