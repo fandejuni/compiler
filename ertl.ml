@@ -91,7 +91,7 @@ let instr = function
     end
 
 let convert_cfg (f: Rtltree.deffun) =
-    let rec aux label i =
+    let aux label i =
         add_graph label (instr i)
     in
     let (label, regs) = begin_fun f (f.fun_entry) in
