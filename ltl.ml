@@ -156,10 +156,15 @@ let choose_register_to_color g (todo: Register.set Register.map) (coloring: colo
         let prio_score = match (Register.S.cardinal possible_colors) with
             |1 -> begin
                 if has_colored_prefs then
-                    4 else 3
-                end
-            |_ -> if has_colored_prefs then
-            2 else 1
+                    4 
+                else 3
+            end
+            |0 -> -1
+            |_ -> begin 
+                if has_colored_prefs then
+                    2
+                else 1
+            end
         in
         if prio_score > !score then
             score := prio_score;
