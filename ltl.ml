@@ -136,16 +136,49 @@ let make m : igraph =
     Label.M.iter add_interf m;
     !g
 
-let choose_register_to_spill (todo: Register.set Register.map) =
+let choose_register_to_spill g (todo: Register.set Register.map) (coloring: coloring) =
     let (x, _) = Register.M.choose todo in
     x
 
-let choose_register_to_color (todo: Register.set Register.map) =
-    let (x, _) = Register.M.choose todo in
-    x
+let choose_register_to_color g (todo: Register.set Register.map) (coloring: coloring) =
+    None
 
 let color g : coloring * int =
-    raise(Error("Marrant"))
+    let todo = ref Register.M.empty in
+    let init r arcs =
+        todo := Register.M.add r (Register.S.diff Register.allocatable arcs.intfs) !todo
+    in
+    Register.M.iter init !g;
+    let coloring : coloring ref = ref Register.M.empty in
+    let i = ref 0 in
+    let rec aux () =
+        if not (Register.M.is_empty !todo) then
+            begin
+                match choose_register_to_color g !todo !coloring with
+                | Some (r, c) ->
+                    begin
+                        let arcs = Register.M.find r !g in
+                        todo := Register.M.remove r !todo;
+                        coloring := Register.M.add r (Ltltree.Reg(c)) !coloring;
+                        let remove_color r =
+                            let a = Register.M.find r !g in
+                            g := Register.M.add r {prefs = a.prefs; intfs = Register.S.remove c a.intfs} !g
+                        in
+                        Register.S.iter remove_color arcs.intfs
+                    end
+                | None ->
+                    begin
+                        let r = choose_register_to_spill g !todo !coloring in
+                        coloring := Register.M.add r (Ltltree.Spilled(!i)) !coloring;
+                        todo := Register.M.remove r !todo;
+                        i := !i + 1
+                    end
+                ;
+                aux ()
+            end
+    in
+    aux ();
+    (!coloring, !i)
 
 let print_graph live fmt =
     let aux l i =
