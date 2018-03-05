@@ -103,12 +103,13 @@ let make m : igraph =
         Register.M.find r !g;
     in
     let add_to_graph f r1 r2 =
-        begin
-            let a1 = get_element r1 in
-            let a2 = get_element r2 in
-            g := Register.M.add r1 (f a1 r2) !g;
-            g := Register.M.add r2 (f a2 r1) !g;
-        end
+        if r1 <> r2 then
+            begin
+                let a1 = get_element r1 in
+                let a2 = get_element r2 in
+                g := Register.M.add r1 (f a1 r2) !g;
+                g := Register.M.add r2 (f a2 r1) !g;
+            end
     in
     let add_pref _ live =
         match live.instr with
@@ -119,11 +120,13 @@ let make m : igraph =
     let add_interf _ live =
         let set_v = live.defs in
         let set_w = ref live.outs in
-        match live.instr with
-        | Embinop(Mmov, w, v, _) when w <> v ->
-            set_w := Register.S.remove w !set_w;
-        | Embinop(Mmov, _, _, _) -> set_w := Register.S.empty;
-        | _ -> ();
+        begin
+            match live.instr with
+            | Embinop(Mmov, w, v, _) when w = v -> set_w := Register.S.empty
+            | Embinop(Mmov, w, v, _) -> set_w := Register.S.remove w !set_w
+            | _ -> ()
+        end
+        ;
         Register.S.iter (fun v -> Register.S.iter (add_to_graph add_interf_to_arc v) !set_w) set_v;
     in
     Label.M.iter add_pref m;
