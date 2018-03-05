@@ -150,8 +150,10 @@ let map_keys_to_set m =
 let choose_register_to_color g (todo: Register.set Register.map) (coloring: coloring) =
     let score = ref 0 in 
     let ret = ref None in 
-    let max_priority r possible_colors =  
+    let max_priority r possible_colors = 
+        print_string "\n  1"; 
         let arcs= Register.M.find r g in 
+        print_string "\n  1b"; 
         let colored = map_keys_to_set coloring in
         let colored_prefs = Register.S.inter arcs.prefs colored in 
         let has_colored_prefs = not (Register.S.is_empty colored_prefs) in 
@@ -170,10 +172,12 @@ let choose_register_to_color g (todo: Register.set Register.map) (coloring: colo
         in
         if prio_score > !score then
             score := prio_score;
-            if has_colored_prefs then 
+            if has_colored_prefs then begin
+                print_string "\n  2"; 
                 let col = Register.M.find (Register.S.choose colored_prefs) coloring in 
-                ret:= Some (r,col)
-            else
+                print_string "\n  2b"; 
+            ret:= Some (r,col) end
+            else 
                 let col = Reg (Register.S.choose (Register.M.find r todo)) in
                 ret:= Some (r,col)
     in
@@ -182,6 +186,8 @@ let choose_register_to_color g (todo: Register.set Register.map) (coloring: colo
 
 
 let color real_g : coloring * int =
+    print_string "\n  color start"; 
+
     let g = ref real_g in
     let todo = ref Register.M.empty in
     let init r arcs =
@@ -189,17 +195,26 @@ let color real_g : coloring * int =
     in
     Register.M.iter init !g;
     let coloring : coloring ref = ref Register.M.empty in
+    print_string "\n  color 1"; 
     let colorer r colour =
+        print_string "\n  colorer "; 
+        Register.print std_formatter r;
         todo := Register.M.remove r !todo;
         coloring := Register.M.add r colour !coloring;
         match colour with
         | Reg(c) ->
             begin
                 let remove_color r =
-                    let s = Register.M.find r !todo in
+                    print_string "\n  colorer 1"; 
+                    let s = Register.M.find r !todo in (*TODO peut ne plus exister *)
+
+                    print_string "\n  colorer 1b"; 
+
                     todo := Register.M.add r (Register.S.remove c s) !todo;
                 in
+                print_string "\n  colorer 2"; 
                 let arcs = Register.M.find r !g in
+                print_string "\n  colorer 2b"; 
                 Register.S.iter remove_color arcs.intfs
             end
         | _ -> ()
@@ -209,6 +224,7 @@ let color real_g : coloring * int =
             colorer r (Reg(r))
     in
     Register.M.iter physical_register !g;
+    print_string "\n  color 2"; 
     let i = ref 0 in
     let rec aux () =
         if not (Register.M.is_empty !todo) then
@@ -227,6 +243,7 @@ let color real_g : coloring * int =
             end
     in
     aux ();
+    print_string "\n  color end"; 
     (!coloring, !i)
 
 let print_graph live fmt =
