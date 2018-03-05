@@ -15,6 +15,9 @@ type live_info = {
 type arcs = { prefs: Register.set; intfs: Register.set }
 type igraph = arcs Register.map
 
+type color = Ltltree.operand
+type coloring = color Register.map
+
 let fill_pred (m: live_info Label.map) =
     let fill label x =
         List.iter (fun l -> let y = Label.M.find l m in y.pred <- Label.S.add label y.pred) x.succ
@@ -132,6 +135,12 @@ let make m : igraph =
     Label.M.iter add_pref m;
     Label.M.iter add_interf m;
     !g
+
+let choose_register_to_color (todo: Register.set Register.map) =
+    raise(Error("Marrant"))
+
+let color g : coloring * int =
+    raise(Error("Marrant"))
 
 let print_graph live fmt =
     let aux l i =
