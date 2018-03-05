@@ -135,7 +135,6 @@ let make m : igraph =
     Label.M.iter add_pref m;
     Label.M.iter add_interf m;
     !g
-
     
 let choose_register_to_spill g (todo: Register.set Register.map) (coloring: coloring) =
     let (x, _) = Register.M.choose todo in
@@ -148,34 +147,69 @@ let map_keys_to_set m =
 
 let choose_register_to_color g (todo: Register.set Register.map) (coloring: coloring) =
     let score = ref 0 in 
-    let ret = ref (None,None) in 
+    let ret = ref None in 
     let max_priority r possible_colors =  
         let arcs= Register.M.find r g in 
         let colored = map_keys_to_set coloring in
         let colored_prefs = Register.S.inter arcs.prefs colored in 
         let has_colored_prefs = not (Register.S.is_empty colored_prefs) in 
         let prio_score = match (Register.S.cardinal possible_colors) with
-            |0 -> 5
             |1 -> begin
                 if has_colored_prefs then
                     4 else 3
                 end
-            |_ -> -1
+            |_ -> if has_colored_prefs then
+            2 else 1
         in
         if prio_score > !score then
             score := prio_score;
             if has_colored_prefs then 
                 let col = Register.M.find (Register.S.choose colored_prefs) coloring in 
-                ret:= (Some(r),Some(col))
+                ret:= Some (r,col)
             else
                 let col = Ltltree.Reg (Register.S.choose (Register.M.find r todo)) in
-                ret:= (Some(r),Some(col))    
+                ret:= Some (r,col)
     in
     Register.M.iter max_priority todo;
-    ret
+    !ret
+
 
 let color g : coloring * int =
-    raise(Error("Marrant"))
+    let todo = ref Register.M.empty in
+    let init r arcs =
+        todo := Register.M.add r (Register.S.diff Register.allocatable arcs.intfs) !todo
+    in
+    Register.M.iter init !g;
+    let coloring : coloring ref = ref Register.M.empty in
+    let i = ref 0 in
+    let rec aux () =
+        if not (Register.M.is_empty !todo) then
+            begin
+                match choose_register_to_color g !todo !coloring with
+                | Some (r, c) ->
+                    begin
+                        let arcs = Register.M.find r !g in
+                        todo := Register.M.remove r !todo;
+                        coloring := Register.M.add r (Ltltree.Reg(c)) !coloring;
+                        let remove_color r =
+                            let a = Register.M.find r !g in
+                            g := Register.M.add r {prefs = a.prefs; intfs = Register.S.remove c a.intfs} !g
+                        in
+                        Register.S.iter remove_color arcs.intfs
+                    end
+                | None ->
+                    begin
+                        let r = choose_register_to_spill g !todo !coloring in
+                        coloring := Register.M.add r (Ltltree.Spilled(!i)) !coloring;
+                        todo := Register.M.remove r !todo;
+                        i := !i + 1
+                    end
+                ;
+                aux ()
+            end
+    in
+    aux ();
+    (!coloring, !i)
 
 let print_graph live fmt =
     let aux l i =
