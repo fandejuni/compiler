@@ -136,8 +136,13 @@ let make m : igraph =
     Label.M.iter add_interf m;
     !g
 
+let choose_register_to_spill (todo: Register.set Register.map) =
+    let (x, _) = Register.M.choose todo in
+    x
+
 let choose_register_to_color (todo: Register.set Register.map) =
-    raise(Error("Marrant"))
+    let (x, _) = Register.M.choose todo in
+    x
 
 let color g : coloring * int =
     raise(Error("Marrant"))
