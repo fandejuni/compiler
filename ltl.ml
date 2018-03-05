@@ -1,4 +1,5 @@
 open Format
+open Ltltree
 
 exception Error of string
 
@@ -15,7 +16,7 @@ type live_info = {
 type arcs = { prefs: Register.set; intfs: Register.set }
 type igraph = arcs Register.map
 
-type color = Ltltree.operand
+type color = operand
 type coloring = color Register.map
 
 let fill_pred (m: live_info Label.map) =
@@ -137,6 +138,7 @@ let make m : igraph =
     !g
     
 let choose_register_to_spill g (todo: Register.set Register.map) (coloring: coloring) =
+    print_string "\nchoose_register_to_spill";
     let (x, _) = Register.M.choose todo in
     x
 let map_keys_to_set m =
@@ -172,14 +174,15 @@ let choose_register_to_color g (todo: Register.set Register.map) (coloring: colo
                 let col = Register.M.find (Register.S.choose colored_prefs) coloring in 
                 ret:= Some (r,col)
             else
-                let col = Ltltree.Reg (Register.S.choose (Register.M.find r todo)) in
+                let col = Reg (Register.S.choose (Register.M.find r todo)) in
                 ret:= Some (r,col)
     in
     Register.M.iter max_priority todo;
     !ret
 
 
-let color g : coloring * int =
+let color real_g : coloring * int =
+    let g = ref real_g in
     let todo = ref Register.M.empty in
     let init r arcs =
         todo := Register.M.add r (Register.S.diff Register.allocatable arcs.intfs) !todo
@@ -190,7 +193,7 @@ let color g : coloring * int =
         todo := Register.M.remove r !todo;
         coloring := Register.M.add r colour !coloring;
         match colour with
-        | Ltltree.Reg(c) ->
+        | Reg(c) ->
             begin
                 let remove_color r =
                     let s = Register.M.find r !todo in
@@ -203,19 +206,19 @@ let color g : coloring * int =
     in
     let physical_register r _ =
         if Register.S.mem r Register.allocatable then
-            colorer r (Ltltree.Reg(r))
+            colorer r (Reg(r))
     in
     Register.M.iter physical_register !g;
     let i = ref 0 in
     let rec aux () =
         if not (Register.M.is_empty !todo) then
             begin
-                match choose_register_to_color g !todo !coloring with
+                match choose_register_to_color !g !todo !coloring with
                 | Some (r, c) -> colorer r c
                 | None ->
                     begin
                         let r = choose_register_to_spill g !todo !coloring in
-                        coloring := Register.M.add r (Ltltree.Spilled(!i)) !coloring;
+                        coloring := Register.M.add r (Spilled(!i)) !coloring;
                         todo := Register.M.remove r !todo;
                         i := !i + 1
                     end
@@ -237,10 +240,18 @@ let print_graph live fmt =
     in
     Ertltree.visit aux
 
-let print ig =
+let print_igraph ig =
   Register.M.iter (fun r arcs ->
     Format.printf "%s: prefs=@[%a@] intfs=@[%a@]@." (r :> string)
       Register.print_set arcs.prefs Register.print_set arcs.intfs) ig
+
+let print_color fmt = function
+      | Reg hr    -> fprintf fmt "%a" Register.print hr
+    | Spilled n -> fprintf fmt "stack %d" n
+let print_coloring cm =
+      Register.M.iter
+          (fun r cr -> printf "%a -> %a@\n" Register.print r print_color cr) cm
+
 
 let print_deffun fmt (f: Ertltree.deffun) = 
   fprintf fmt "%s(%d)@\n" f.fun_name f.fun_formals;
@@ -249,7 +260,10 @@ let print_deffun fmt (f: Ertltree.deffun) =
   fprintf fmt "locals: @[%a@]@\n" Register.print_set f.fun_locals;
   let m = liveness f.fun_body in
   print_graph m fmt f.fun_body f.fun_entry;
-  print (make m);
+  let g = make m in
+  print_igraph g;
+  let c = color g in
+  print_coloring (fst c);
   fprintf fmt "@]@."
 
 let print_file fmt (p: Ertltree.file) =
