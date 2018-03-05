@@ -150,22 +150,32 @@ let color g : coloring * int =
     in
     Register.M.iter init !g;
     let coloring : coloring ref = ref Register.M.empty in
+    let colorer r colour =
+        todo := Register.M.remove r !todo;
+        coloring := Register.M.add r colour !coloring;
+        match colour with
+        | Ltltree.Reg(c) ->
+            begin
+                let remove_color r =
+                    let s = Register.M.find r !todo in
+                    todo := Register.M.add r (Register.S.remove c s) !todo;
+                in
+                let arcs = Register.M.find r !g in
+                Register.S.iter remove_color arcs.intfs
+            end
+        | _ -> ()
+    in
+    let physical_register r _ =
+        if Register.S.mem r Register.allocatable then
+            colorer r (Ltltree.Reg(r))
+    in
+    Register.M.iter physical_register !g;
     let i = ref 0 in
     let rec aux () =
         if not (Register.M.is_empty !todo) then
             begin
                 match choose_register_to_color g !todo !coloring with
-                | Some (r, c) ->
-                    begin
-                        let arcs = Register.M.find r !g in
-                        todo := Register.M.remove r !todo;
-                        coloring := Register.M.add r (Ltltree.Reg(c)) !coloring;
-                        let remove_color r =
-                            let a = Register.M.find r !g in
-                            g := Register.M.add r {prefs = a.prefs; intfs = Register.S.remove c a.intfs} !g
-                        in
-                        Register.S.iter remove_color arcs.intfs
-                    end
+                | Some (r, c) -> colorer r c
                 | None ->
                     begin
                         let r = choose_register_to_spill g !todo !coloring in
