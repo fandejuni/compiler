@@ -136,13 +136,43 @@ let make m : igraph =
     Label.M.iter add_interf m;
     !g
 
-let choose_register_to_spill (todo: Register.set Register.map) =
+    
+let choose_register_to_spill g (todo: Register.set Register.map) (coloring: coloring) =
     let (x, _) = Register.M.choose todo in
     x
+let map_keys_to_set m =
+    let s= ref Register.S.empty in
+    let aux v _ = s:= Register.S.add v !s 
+    in Register.M.iter aux m;
+    !s
 
-let choose_register_to_color (todo: Register.set Register.map) =
-    let (x, _) = Register.M.choose todo in
-    x
+let choose_register_to_color g (todo: Register.set Register.map) (coloring: coloring) =
+    let score = ref 0 in 
+    let ret = ref (None,None) in 
+    let max_priority r possible_colors =  
+        let arcs= Register.M.find r g in 
+        let colored = map_keys_to_set coloring in
+        let colored_prefs = Register.S.inter arcs.prefs colored in 
+        let has_colored_prefs = not (Register.S.is_empty colored_prefs) in 
+        let prio_score = match (Register.S.cardinal possible_colors) with
+            |0 -> 5
+            |1 -> begin
+                if has_colored_prefs then
+                    4 else 3
+                end
+            |_ -> -1
+        in
+        if prio_score > !score then
+            score := prio_score;
+            if has_colored_prefs then 
+                let col = Register.M.find (Register.S.choose colored_prefs) coloring in 
+                ret:= (Some(r),Some(col))
+            else
+                let col = Ltltree.Reg (Register.S.choose (Register.M.find r todo)) in
+                ret:= (Some(r),Some(col))    
+    in
+    Register.M.iter max_priority todo;
+    ret
 
 let color g : coloring * int =
     raise(Error("Marrant"))
