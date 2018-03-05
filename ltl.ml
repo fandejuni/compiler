@@ -12,6 +12,9 @@ type live_info = {
   mutable outs: Register.set;    (* variables vivantes en sortie *)
 }
 
+type arcs = { prefs: Register.set; intfs: Register.set }
+type igraph = arcs Register.map
+
 let fill_pred (m: live_info Label.map) =
     let fill label x =
         List.iter (fun l -> let y = Label.M.find l m in y.pred <- Label.S.add label y.pred) x.succ
@@ -80,6 +83,53 @@ let liveness (cfg: Ertltree.cfg) =
     kildall m;
     m
 
+let make m : igraph =
+    let g = ref Register.M.empty in
+    let add_pref_to_arc arc r =
+        {
+            intfs = arc.intfs;
+            prefs = Register.S.add r arc.prefs;
+        }
+    in
+    let add_interf_to_arc arc r =
+        {
+            intfs = Register.S.add r arc.intfs;
+            prefs = Register.S.remove r arc.prefs;
+        }
+    in
+    let get_element r =
+        if not (Register.M.exists (fun k _ -> r = k) !g) then
+            g := Register.M.add r {prefs = Register.S.empty; intfs = Register.S.empty} !g;
+        Register.M.find r !g;
+    in
+    let add_to_graph f r1 r2 =
+        begin
+            let a1 = get_element r1 in
+            let a2 = get_element r2 in
+            g := Register.M.add r1 (f a1 r2) !g;
+            g := Register.M.add r2 (f a2 r1) !g;
+        end
+    in
+    let add_pref _ live =
+        match live.instr with
+        | Embinop(Mmov, r1, r2, _) when r1 <> r2 ->
+            add_to_graph add_pref_to_arc r1 r2
+        | _ -> ()
+    in
+    let add_interf _ live =
+        let set_v = live.defs in
+        let set_w = ref live.outs in
+        match live.instr with
+        | Embinop(Mmov, w, v, _) when w <> v ->
+            set_w := Register.S.remove w !set_w;
+        | Embinop(Mmov, _, _, _) -> set_w := Register.S.empty;
+        | _ -> ();
+        Register.S.iter (fun v -> Register.S.iter (add_to_graph add_interf_to_arc v) !set_w) set_v;
+    in
+    Label.M.iter add_pref m;
+    Label.M.iter add_interf m;
+    !g
+
 let print_graph live fmt =
     let aux l i =
         begin
@@ -91,12 +141,19 @@ let print_graph live fmt =
     in
     Ertltree.visit aux
 
+let print ig =
+  Register.M.iter (fun r arcs ->
+    Format.printf "%s: prefs=@[%a@] intfs=@[%a@]@." (r :> string)
+      Register.print_set arcs.prefs Register.print_set arcs.intfs) ig
+
 let print_deffun fmt (f: Ertltree.deffun) = 
   fprintf fmt "%s(%d)@\n" f.fun_name f.fun_formals;
   fprintf fmt "  @[";
   fprintf fmt "entry : %a@\n" Label.print f.fun_entry;
   fprintf fmt "locals: @[%a@]@\n" Register.print_set f.fun_locals;
-  print_graph (liveness f.fun_body) fmt f.fun_body f.fun_entry;
+  let m = liveness f.fun_body in
+  print_graph m fmt f.fun_body f.fun_entry;
+  print (make m);
   fprintf fmt "@]@."
 
 let print_file fmt (p: Ertltree.file) =

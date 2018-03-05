@@ -60,7 +60,7 @@ let () =
     if debug then
         Ertltree.print_file std_formatter p;
     if debug then
-        Live.print_file std_formatter p;
+        Ltl.print_file std_formatter p;
     if !interp_ertl then begin ignore (Ertlinterp.program p); exit 0 end;
     (* ... *)
   with
