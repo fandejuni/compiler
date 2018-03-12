@@ -29,8 +29,6 @@ let generate i =
     add_graph l i;
     l
 
-
-
 let fill_pred (m: live_info Label.map) =
     let fill label x =
         List.iter (fun l -> let y = Label.M.find l m in y.pred <- Label.S.add label y.pred) x.succ
@@ -275,7 +273,10 @@ let color real_g : coloring * int =
 let convert_ltl (coloring, i) deffun =
     graph := Label.M.empty;
     let get r =
-        Register.M.find r coloring
+        if r = Register.rsp then
+            Reg(Register.rsp)
+        else
+            Register.M.find r coloring
     in
     let load n o1 o2 l = match (o1, o2) with
     | (Reg(r1), Reg(r2)) -> Eload(r1, n, r2, l)
@@ -290,27 +291,42 @@ let convert_ltl (coloring, i) deffun =
         let l2 = generate (Eload(Register.tmp1, n, Register.tmp2, l3)) in
         Eload(Register.rbp, n1, Register.tmp1, l2)
     in
-    let aux l = function
-    | Ertltree.Econst(i32, register, label) -> add_graph l (Econst(i32, get register, label))
-    | Ertltree.Eload(r1, i, r2, label) -> raise(Error("Not implemented yet"))
-    | Ertltree.Estore(r1, r2, i, label) -> raise(Error("Not implemented yet"))
-    | Ertltree.Emunop(munop, register, label) -> add_graph l (Emunop(munop, get register, label))
-    | Ertltree.Embinop(mbinop, r1, r2, label) -> add_graph l (Embinop(mbinop, get r1, get r2, label))
-    | Ertltree.Emubranch(mubranch, register, l1, l2) -> add_graph l (Emubranch(mubranch, get register, l1, l2))
-    | Ertltree.Embbranch(mbbranch, r1, r2, l1, l2) -> add_graph l (Embbranch(mbbranch, get r1, get r2, l1, l2))
-    | Ertltree.Egoto(label) -> add_graph l (Egoto(label))
-    | Ertltree.Ecall(ident, i, label) -> add_graph l (Ecall(ident, label))
-    | Ertltree.Ealloc_frame(label) ->
-        let l3 = generate (Emunop(Maddi(Int32.of_int(-8 * i)), Reg(Register.rsp), label)) in
-        let l2 = generate (Embinop(Mmov, Reg(Register.rsp), Reg(Register.rbp), l3)) in
-        add_graph l (Epush(Reg(Register.rbp), l2))
-    | Ertltree.Edelete_frame(label) ->
-        let l2 = generate (Embinop(Mmov, Reg(Register.rbp), Reg(Register.rsp), label)) in
-        add_graph l (Epop(Register.rbp, l2))
-    | Ertltree.Eget_param(i, register, label) -> 
-        add_graph l (load i (Reg(Register.rbp)) (get register) label)
-    | Ertltree.Epush_param(register, label) -> raise(Error("Not implemented yet"))
-    | Ertltree.Ereturn -> add_graph l (Ereturn)
+    let store o1 n o2 l = match (o1, o2) with
+    | (Reg(r1), Reg(r2)) -> Estore(r1, r2, n, l)
+    | (Reg(r1), Spilled(n2)) ->
+        let l2 = generate (Estore(r1, Register.tmp1, n, l)) in
+        Eload(Register.rbp, n2, Register.tmp1, l2)
+    | (Spilled(n1), Reg(r2)) ->
+        let l2 = generate (Estore(Register.tmp1, r2, n, l)) in
+        Eload(Register.rbp, n1, Register.tmp1, l2)
+    | (Spilled(n1), Spilled(n2)) ->
+        let l3 = generate (Estore(Register.tmp1, Register.tmp2, n, l)) in
+        let l2 = generate (Eload(Register.rbp, n1, Register.tmp1, l3)) in
+        Eload(Register.rbp, n2, Register.tmp2, l2)
+    in
+    let aux l instr = 
+        let i = match instr with
+        | Ertltree.Econst(i32, register, label) -> Econst(i32, get register, label)
+        | Ertltree.Eload(r1, i, r2, label) -> load i (get r1) (get r2) label
+        | Ertltree.Estore(r1, r2, i, label) -> store (get r1) i (get r2) label
+        | Ertltree.Emunop(munop, register, label) -> Emunop(munop, get register, label)
+        | Ertltree.Embinop(mbinop, r1, r2, label) -> Embinop(mbinop, get r1, get r2, label)
+        | Ertltree.Emubranch(mubranch, register, l1, l2) -> Emubranch(mubranch, get register, l1, l2)
+        | Ertltree.Embbranch(mbbranch, r1, r2, l1, l2) -> Embbranch(mbbranch, get r1, get r2, l1, l2)
+        | Ertltree.Egoto(label) -> Egoto(label)
+        | Ertltree.Ecall(ident, i, label) -> Ecall(ident, label)
+        | Ertltree.Ealloc_frame(label) ->
+            let l3 = generate (Emunop(Maddi(Int32.of_int(-8 * i)), Reg(Register.rsp), label)) in
+            let l2 = generate (Embinop(Mmov, Reg(Register.rsp), Reg(Register.rbp), l3)) in
+            Epush(Reg(Register.rbp), l2)
+        | Ertltree.Edelete_frame(label) ->
+            let l2 = generate (Embinop(Mmov, Reg(Register.rbp), Reg(Register.rsp), label)) in
+            Epop(Register.rbp, l2)
+        | Ertltree.Eget_param(i, register, label) -> load i (Reg(Register.rbp)) (get register) label
+        | Ertltree.Epush_param(register, label) -> Epush(get register, label)
+        | Ertltree.Ereturn -> Ereturn
+        in
+        add_graph l i
     in
     Label.M.iter aux deffun
 
