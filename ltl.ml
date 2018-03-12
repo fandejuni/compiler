@@ -43,7 +43,7 @@ let pop s =
 let print_set = Register.print_set
 
 let spillify n =
-    (n) * (-8)
+    (n+1) * (-8)
 
 let kildall m =
     let get l =
@@ -333,9 +333,9 @@ let convert_ltl (coloring, i) deffun =
             let l2 = generate (Embinop(Mmov, Reg(Register.rsp), Reg(Register.rbp), l3)) in
             Epush(Reg(Register.rbp), l2)
         | Ertltree.Edelete_frame(label) ->
-            let l2 = generate (Embinop(Mmov, Reg(Register.rbp), Reg(Register.rsp), label)) in
-            Epop(Register.rbp, l2)
-        | Ertltree.Eget_param(i, register, label) -> load i (Reg(Register.rbp)) (get register) label
+            let l2 = generate (Epop(Register.rbp, label)) in
+            Embinop(Mmov, Reg(Register.rbp), Reg(Register.rsp), l2)
+        | Ertltree.Eget_param(i, register, label) -> load (i) (Reg(Register.rbp)) (get register) label
         | Ertltree.Epush_param(register, label) -> Epush(get register, label)
         | Ertltree.Ereturn -> Ereturn
         in
