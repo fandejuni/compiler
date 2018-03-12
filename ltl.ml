@@ -335,7 +335,9 @@ let convert_ltl (coloring, i) deffun =
         | Ertltree.Edelete_frame(label) ->
             let l2 = generate (Epop(Register.rbp, label)) in
             Embinop(Mmov, Reg(Register.rbp), Reg(Register.rsp), l2)
-        | Ertltree.Eget_param(i, register, label) -> load (i) (Reg(Register.rbp)) (get register) label
+        | Ertltree.Eget_param(i, register, label) ->
+            Embinop(Mmov, Spilled(i), get register, label)
+                (* load (i) (Reg(Register.rbp)) (get register) label *)
         | Ertltree.Epush_param(register, label) -> Epush(get register, label)
         | Ertltree.Ereturn -> Ereturn
         in
@@ -362,7 +364,7 @@ let print_igraph ig =
 let convert_deffun (f: Ertltree.deffun) =
   let m = liveness f.fun_body in
   let g = make m in
-  print_igraph g;
+  (* print_igraph g; *)
   let (c, i) = color g in
   (* print_coloring c; *)
   convert_ltl (c, i) f.fun_body;
