@@ -65,24 +65,30 @@ let kildall m =
     in
     iterer ()
 
+let convert_rsp = function
+    | Ertltree.Emunop(Maddi(_), r, l) when r = Register.rsp -> Ertltree.Egoto(l)
+    | i -> i
+
 let liveness (cfg: Ertltree.cfg) =
     let aux instr =
-        let (defs, uses) = Ertltree.def_use instr in
-        let s_defs = ref Register.S.empty in
-        let s_uses = ref Register.S.empty in
-        List.iter (fun x -> s_defs := Register.S.add x !s_defs) defs;
-        List.iter (fun x -> s_uses := Register.S.add x !s_uses) uses;
-        {
-            instr = instr;
-            succ = Ertltree.succ instr;
-            pred = Label.S.empty;
-            defs = !s_defs;
-            uses = !s_uses;
-            ins = Register.S.empty;
-            outs = Register.S.empty;
-        }
+        begin
+            let (defs, uses) = Ertltree.def_use instr in
+            let s_defs = ref Register.S.empty in
+            let s_uses = ref Register.S.empty in
+            List.iter (fun x -> s_defs := Register.S.add x !s_defs) defs;
+            List.iter (fun x -> s_uses := Register.S.add x !s_uses) uses;
+            {
+                instr = instr;
+                succ = Ertltree.succ instr;
+                pred = Label.S.empty;
+                defs = !s_defs;
+                uses = !s_uses;
+                ins = Register.S.empty;
+                outs = Register.S.empty;
+            }
+        end
     in
-    let m = Label.M.map aux cfg in
+    let m = Label.M.map aux (Label.M.map convert_rsp cfg) in
     fill_pred m;
     kildall m;
     m
@@ -138,7 +144,6 @@ let make m : igraph =
     !g
     
 let choose_register_to_spill g (todo: Register.set Register.map) (coloring: coloring) =
-    print_string "\nchoose_register_to_spill";
     let (x, _) = Register.M.choose todo in
     x
 let map_keys_to_set m =
@@ -168,12 +173,8 @@ let choose_register_to_color g (todo: Register.set Register.map) (coloring: colo
                 else 1
             end
         in
-        print_string " \n bonjour ";
-        print_int prio_score;
-        print_int !score;
         if prio_score > !score then
             begin
-                
                 score := prio_score;
                 if has_colored_prefs then begin
                     let col = Register.M.find (Register.S.choose colored_prefs) coloring in 
@@ -189,15 +190,16 @@ let choose_register_to_color g (todo: Register.set Register.map) (coloring: colo
 let print_color fmt = function
   | Reg hr    -> fprintf fmt "%a" Register.print hr
   | Spilled n -> fprintf fmt "stack %d" (-8*(n+1))
+
 let print_coloring cm =
-    Register.M.iter
-        (fun r cr -> printf "%a -> %a@\n" Register.print r print_color cr) cm
-
-
+    let aux r cr =
+        if not (Register.S.mem r Register.allocatable) then
+            printf "%a -> %a@\n" Register.print r print_color cr
+    in
+    print_string "\n\n=== COLORING =============================================\n\n";
+    Register.M.iter aux cm
 
 let print_todo todo =
-    print_string "\n \n TODO : \n"; 
-
     let aux r s = Register.print std_formatter r;
     print_string " -> ";
     print_set std_formatter s;
@@ -205,8 +207,6 @@ let print_todo todo =
     in Register.M.iter aux !todo
 
 let color real_g : coloring * int =
-    print_string "\n  color start"; 
-
     let g = ref real_g in
     let todo = ref Register.M.empty in
     let init r arcs =
@@ -214,17 +214,7 @@ let color real_g : coloring * int =
     in
     Register.M.iter init !g;
     let coloring : coloring ref = ref Register.M.empty in
-    print_string "\n  color 1 \n";
     let colorer r colour =
-        print_string "\n  now coloring : ";
-        Register.print std_formatter r;
-        
-        print_todo todo;
-        print_string "\n  overall coloring : ";
-        print_coloring !coloring;
-        print_string "\n end overall \n";
-
-       
         todo := Register.M.remove r !todo;
         coloring := Register.M.add r colour !coloring;
         match colour with
@@ -249,12 +239,10 @@ let color real_g : coloring * int =
             colorer r (Reg(r))
     in
     Register.M.iter physical_register !g;
-    print_string "\n  color 2"; 
     let i = ref 0 in
     let rec aux () =
         if not (Register.M.is_empty !todo) then
             begin
-                print_string "\n  debut ";
                 begin
                 match choose_register_to_color !g !todo !coloring with
                 | Some (r, c) -> colorer r c
@@ -266,13 +254,10 @@ let color real_g : coloring * int =
                         i := !i + 1
                     end
                 end;
-                print_string "\n  fin ";
                 aux ()
             end
-        else print_string "todo vide \n"
     in
     aux ();
-    print_string "\n  color end"; 
     (!coloring, !i)
 
 let print_graph live fmt =
