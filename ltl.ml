@@ -42,6 +42,9 @@ let pop s =
 
 let print_set = Register.print_set
 
+let spillify n =
+    (n) * (-8)
+
 let kildall m =
     let get l =
         Label.M.find l m
@@ -168,7 +171,7 @@ let choose_register_to_color g (todo: Register.set Register.map) (coloring: colo
     let max_priority r possible_colors = 
         let arcs= Register.M.find r g in 
         let colored = map_keys_to_set coloring in
-        let colored_prefs = Register.S.inter arcs.prefs colored in 
+        let colored_prefs = Register.S.inter possible_colors (Register.S.inter arcs.prefs colored) in 
         let has_colored_prefs = not (Register.S.is_empty colored_prefs) in 
         let prio_score = match (Register.S.cardinal possible_colors) with
             |1 -> begin
@@ -231,13 +234,22 @@ let color real_g : coloring * int =
         | Reg(c) ->
             begin
                 let remove_color r =
-                    try (
-                        let s = Register.M.find r !todo in
-                        todo := Register.M.add r (Register.S.remove c s) !todo;)
-                    with 
-                        |Not_found -> ();
-                
-                    
+                    begin
+                        (*
+                        print_string "\nRemove color: ";
+                        Register.print std_formatter c;
+                        print_string " from ";
+                        Register.print std_formatter r;
+                        *)
+                        try (
+                            let s = Register.M.find r !todo in
+                            todo := Register.M.add r (Register.S.remove c s) !todo;
+                            (*print_string "Effectif!";
+                            Register.print_set std_formatter (Register.S.remove c s);*)
+                            )
+                        with 
+                            |Not_found -> ();
+                    end
                 in
                 let arcs = Register.M.find r !g in
                 Register.S.iter remove_color arcs.intfs
@@ -259,7 +271,7 @@ let color real_g : coloring * int =
                 | None ->
                     begin
                         let r = choose_register_to_spill g !todo !coloring in
-                        coloring := Register.M.add r (Spilled(!i)) !coloring;
+                        coloring := Register.M.add r (Spilled(spillify !i)) !coloring;
                         todo := Register.M.remove r !todo;
                         i := !i + 1
                     end
@@ -279,30 +291,30 @@ let convert_ltl (coloring, i) deffun =
             Register.M.find r coloring
     in
     let load n o1 o2 l = match (o1, o2) with
-    | (Reg(r1), Reg(r2)) -> Eload(r1, n, r2, l)
-    | (Reg(r1), Spilled(n2)) ->
-        let l2 =  generate (Estore(Register.tmp1, Register.rbp, n2, l)) in
-        Eload(r1, n, Register.tmp1, l2)
-    | (Spilled(n1), Reg(r2)) ->
-        let l2 = generate (Eload(Register.tmp1, n, r2, l)) in
-        Eload(Register.rbp, n1, Register.tmp1, l2)
-    | (Spilled(n1), Spilled(n2)) ->
-        let l3 = generate (Estore(Register.tmp2, Register.rbp, n2, l)) in
-        let l2 = generate (Eload(Register.tmp1, n, Register.tmp2, l3)) in
-        Eload(Register.rbp, n1, Register.tmp1, l2)
+        | (Reg(r1), Reg(r2)) -> Eload(r1, n, r2, l)
+        | (Reg(r1), Spilled(n2)) ->
+            let l2 =  generate (Estore(Register.tmp1, Register.rbp, n2, l)) in
+            Eload(r1, n, Register.tmp1, l2)
+        | (Spilled(n1), Reg(r2)) ->
+            let l2 = generate (Eload(Register.tmp1, n, r2, l)) in
+            Eload(Register.rbp, n1, Register.tmp1, l2)
+        | (Spilled(n1), Spilled(n2)) ->
+            let l3 = generate (Estore(Register.tmp2, Register.rbp, n2, l)) in
+            let l2 = generate (Eload(Register.tmp1, n, Register.tmp2, l3)) in
+            Eload(Register.rbp, n1, Register.tmp1, l2)
     in
     let store o1 n o2 l = match (o1, o2) with
-    | (Reg(r1), Reg(r2)) -> Estore(r1, r2, n, l)
-    | (Reg(r1), Spilled(n2)) ->
-        let l2 = generate (Estore(r1, Register.tmp1, n, l)) in
-        Eload(Register.rbp, n2, Register.tmp1, l2)
-    | (Spilled(n1), Reg(r2)) ->
-        let l2 = generate (Estore(Register.tmp1, r2, n, l)) in
-        Eload(Register.rbp, n1, Register.tmp1, l2)
-    | (Spilled(n1), Spilled(n2)) ->
-        let l3 = generate (Estore(Register.tmp1, Register.tmp2, n, l)) in
-        let l2 = generate (Eload(Register.rbp, n1, Register.tmp1, l3)) in
-        Eload(Register.rbp, n2, Register.tmp2, l2)
+        | (Reg(r1), Reg(r2)) -> Estore(r1, r2, n, l)
+        | (Reg(r1), Spilled(n2)) ->
+            let l2 = generate (Estore(r1, Register.tmp1, n, l)) in
+            Eload(Register.rbp, n2, Register.tmp1, l2)
+        | (Spilled(n1), Reg(r2)) ->
+            let l2 = generate (Estore(Register.tmp1, r2, n, l)) in
+            Eload(Register.rbp, n1, Register.tmp1, l2)
+        | (Spilled(n1), Spilled(n2)) ->
+            let l3 = generate (Estore(Register.tmp1, Register.tmp2, n, l)) in
+            let l2 = generate (Eload(Register.rbp, n1, Register.tmp1, l3)) in
+            Eload(Register.rbp, n2, Register.tmp2, l2)
     in
     let aux l instr = 
         let i = match instr with
@@ -310,6 +322,7 @@ let convert_ltl (coloring, i) deffun =
         | Ertltree.Eload(r1, i, r2, label) -> load i (get r1) (get r2) label
         | Ertltree.Estore(r1, r2, i, label) -> store (get r1) i (get r2) label
         | Ertltree.Emunop(munop, register, label) -> Emunop(munop, get register, label)
+        | Ertltree.Embinop(Mmov, r1, r2, label) when (get r1) = (get r2) -> Egoto(label)
         | Ertltree.Embinop(mbinop, r1, r2, label) -> Embinop(mbinop, get r1, get r2, label)
         | Ertltree.Emubranch(mubranch, register, l1, l2) -> Emubranch(mubranch, get register, l1, l2)
         | Ertltree.Embbranch(mbbranch, r1, r2, l1, l2) -> Embbranch(mbbranch, get r1, get r2, l1, l2)
@@ -346,6 +359,19 @@ let print_igraph ig =
     Format.printf "%s: prefs=@[%a@] intfs=@[%a@]@." (r :> string)
       Register.print_set arcs.prefs Register.print_set arcs.intfs) ig
 
+let convert_deffun (f: Ertltree.deffun) =
+  let m = liveness f.fun_body in
+  let g = make m in
+  print_igraph g;
+  let (c, i) = color g in
+  (* print_coloring c; *)
+  convert_ltl (c, i) f.fun_body;
+  {
+      fun_name = f.fun_name;
+      fun_body = !graph;
+      fun_entry = f.fun_entry;
+  }
+
 let print_deffun fmt (f: Ertltree.deffun) = 
   fprintf fmt "%s(%d)@\n" f.fun_name f.fun_formals;
   fprintf fmt "  @[";
@@ -371,3 +397,7 @@ let print_file fmt (p: Ertltree.file) =
   fprintf fmt "=== ERTL =================================================@\n";
   List.iter (print_deffun fmt) p.funs
 
+let program (p: Ertltree.file) =
+    {
+        funs = List.map convert_deffun p.funs;
+    }
