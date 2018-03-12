@@ -168,21 +168,27 @@ let choose_register_to_color g (todo: Register.set Register.map) (coloring: colo
                 else 1
             end
         in
+        print_string " \n bonjour ";
+        print_int prio_score;
+        print_int !score;
         if prio_score > !score then
-            score := prio_score;
-            if has_colored_prefs then begin
-                let col = Register.M.find (Register.S.choose colored_prefs) coloring in 
-            ret:= Some (r,col) end
-            else 
-                let col = Reg (Register.S.choose (Register.M.find r todo)) in
-                ret:= Some (r,col)
+            begin
+                
+                score := prio_score;
+                if has_colored_prefs then begin
+                    let col = Register.M.find (Register.S.choose colored_prefs) coloring in 
+                ret:= Some (r,col) end
+                else 
+                    let col = Reg (Register.S.choose possible_colors) in
+                    ret:= Some (r,col)
+            end
     in
     Register.M.iter max_priority todo;
     !ret
 
 let print_color fmt = function
   | Reg hr    -> fprintf fmt "%a" Register.print hr
-  | Spilled n -> fprintf fmt "stack %d" n
+  | Spilled n -> fprintf fmt "stack %d" (-8*(n+1))
 let print_coloring cm =
     Register.M.iter
         (fun r cr -> printf "%a -> %a@\n" Register.print r print_color cr) cm
