@@ -151,9 +151,7 @@ let choose_register_to_color g (todo: Register.set Register.map) (coloring: colo
     let score = ref 0 in 
     let ret = ref None in 
     let max_priority r possible_colors = 
-        print_string "\n  1"; 
         let arcs= Register.M.find r g in 
-        print_string "\n  1b"; 
         let colored = map_keys_to_set coloring in
         let colored_prefs = Register.S.inter arcs.prefs colored in 
         let has_colored_prefs = not (Register.S.is_empty colored_prefs) in 
@@ -173,9 +171,7 @@ let choose_register_to_color g (todo: Register.set Register.map) (coloring: colo
         if prio_score > !score then
             score := prio_score;
             if has_colored_prefs then begin
-                print_string "\n  2"; 
                 let col = Register.M.find (Register.S.choose colored_prefs) coloring in 
-                print_string "\n  2b"; 
             ret:= Some (r,col) end
             else 
                 let col = Reg (Register.S.choose (Register.M.find r todo)) in
@@ -184,6 +180,23 @@ let choose_register_to_color g (todo: Register.set Register.map) (coloring: colo
     Register.M.iter max_priority todo;
     !ret
 
+let print_color fmt = function
+  | Reg hr    -> fprintf fmt "%a" Register.print hr
+  | Spilled n -> fprintf fmt "stack %d" n
+let print_coloring cm =
+    Register.M.iter
+        (fun r cr -> printf "%a -> %a@\n" Register.print r print_color cr) cm
+
+
+
+let print_todo todo =
+    print_string "\n \n TODO : \n"; 
+
+    let aux r s = Register.print std_formatter r;
+    print_string " -> ";
+    print_set std_formatter s;
+    print_string " \n";
+    in Register.M.iter aux !todo
 
 let color real_g : coloring * int =
     print_string "\n  color start"; 
@@ -195,26 +208,32 @@ let color real_g : coloring * int =
     in
     Register.M.iter init !g;
     let coloring : coloring ref = ref Register.M.empty in
-    print_string "\n  color 1"; 
+    print_string "\n  color 1 \n";
     let colorer r colour =
-        print_string "\n  colorer "; 
+        print_string "\n  now coloring : ";
         Register.print std_formatter r;
+        
+        print_todo todo;
+        print_string "\n  overall coloring : ";
+        print_coloring !coloring;
+        print_string "\n end overall \n";
+
+       
         todo := Register.M.remove r !todo;
         coloring := Register.M.add r colour !coloring;
         match colour with
         | Reg(c) ->
             begin
                 let remove_color r =
-                    print_string "\n  colorer 1"; 
-                    let s = Register.M.find r !todo in (*TODO peut ne plus exister *)
-
-                    print_string "\n  colorer 1b"; 
-
-                    todo := Register.M.add r (Register.S.remove c s) !todo;
+                    try (
+                        let s = Register.M.find r !todo in
+                        todo := Register.M.add r (Register.S.remove c s) !todo;)
+                    with 
+                        |Not_found -> ();
+                
+                    
                 in
-                print_string "\n  colorer 2"; 
                 let arcs = Register.M.find r !g in
-                print_string "\n  colorer 2b"; 
                 Register.S.iter remove_color arcs.intfs
             end
         | _ -> ()
@@ -229,6 +248,8 @@ let color real_g : coloring * int =
     let rec aux () =
         if not (Register.M.is_empty !todo) then
             begin
+                print_string "\n  debut ";
+                begin
                 match choose_register_to_color !g !todo !coloring with
                 | Some (r, c) -> colorer r c
                 | None ->
@@ -238,9 +259,11 @@ let color real_g : coloring * int =
                         todo := Register.M.remove r !todo;
                         i := !i + 1
                     end
-                ;
+                end;
+                print_string "\n  fin ";
                 aux ()
             end
+        else print_string "todo vide \n"
     in
     aux ();
     print_string "\n  color end"; 
@@ -261,14 +284,6 @@ let print_igraph ig =
   Register.M.iter (fun r arcs ->
     Format.printf "%s: prefs=@[%a@] intfs=@[%a@]@." (r :> string)
       Register.print_set arcs.prefs Register.print_set arcs.intfs) ig
-
-let print_color fmt = function
-      | Reg hr    -> fprintf fmt "%a" Register.print hr
-    | Spilled n -> fprintf fmt "stack %d" n
-let print_coloring cm =
-      Register.M.iter
-          (fun r cr -> printf "%a -> %a@\n" Register.print r print_color cr) cm
-
 
 let print_deffun fmt (f: Ertltree.deffun) = 
   fprintf fmt "%s(%d)@\n" f.fun_name f.fun_formals;
