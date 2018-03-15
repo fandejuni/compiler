@@ -3,6 +3,7 @@
 
 open Format
 open Lexing
+open Linearisation
 
 let () = Printexc.record_backtrace true
 
