@@ -31,10 +31,34 @@ let register (r : Register.t) = match (r :> string) with
     | "%r15" -> X86_64.r15
     | _ -> raise (Error "Unknown register")
 
+let register_b (r : Register.t) = match (r :> string) with
+    | "%rax" -> X86_64.al
+    | "%rbx" -> X86_64.bl
+    | "%rcx" -> X86_64.cl
+    | "%rdx" -> X86_64.dl
+    | "%rsi" -> X86_64.sil
+    | "%rdi" -> X86_64.dil
+    | "%rbp" -> X86_64.bpl
+    | "%rsp" -> X86_64.spl
+    | "%r8" -> X86_64.r8b
+    | "%r9" -> X86_64.r9b
+    | "%r10" -> X86_64.r10b
+    | "%r11" -> X86_64.r11b
+    | "%r12" -> X86_64.r12b
+    | "%r13" -> X86_64.r13b
+    | "%r14" -> X86_64.r14b
+    | "%r15" -> X86_64.r15b
+    | _ -> raise (Error "Unknown register")
+
 let operand (op: Ltltree.operand) =
     match op with
     | Reg(r) -> reg (register(r))
     | Spilled(i) -> ind ~ofs:i X86_64.rbp 
+
+let operand_b (op: Ltltree.operand) =
+    match op with
+    | Reg(r) -> reg (register_b(r))
+    | Spilled(i) -> raise (Error "IMPOSSIBLE")
 
 let convert_label (l: Label.t) = (l :> string)
 
@@ -47,76 +71,111 @@ let rec lin g l =
     emit_wl (jmp (l :> string))
   end
 
-and instr g l = function
+and instr g l i =
+    print_string (convert_label l);
+    match i with
     | Ltltree.Econst (n, r, l1) ->
-        emit l (movq (imm32 n) (operand r)); lin g l1
+        begin emit l (movq (imm32 n) (operand r)); lin g l1 end
     | Ltltree.Eload(r1, i, r2, label) ->
-        emit l (movq (ind ~ofs:i (register r1)) (operand (Reg(r2))));
-        lin g label
+        begin
+            emit l (movq (ind ~ofs:i (register r1)) (operand (Reg(r2))));
+            lin g label
+        end
     | Ltltree.Estore(r1, r2, i, label) ->
-        emit l (movq (operand (Reg(r1))) (ind ~ofs:i (register r2)));
-        lin g label
+        begin
+            emit l (movq (operand (Reg(r1))) (ind ~ofs:i (register r2)));
+            lin g label
+        end
     | Ltltree.Egoto(label) ->
-        emit l (jmp (convert_label label)); lin g label
-    | Ltltree.Ereturn ->
-        emit l ret
+        (*
+        begin
+            if Hashtbl.mem visited l then emit l (jmp (convert_label label))
+            else lin g label
+        end
+        *)
+        begin
+            emit l (jmp (convert_label label));
+            lin g label
+        end
+    | Ltltree.Ereturn -> emit l ret
     | Ltltree.Emunop(munop, r, label) ->
-        let i =
-        begin match munop with
-        | Maddi(n) -> addq (imm32 n) (operand r)
-        | Msetei(n) -> raise (Error "TODO")
-        | Msetnei(n) -> raise (Error "TODO")
-        end in
-        emit l i; lin g label
+        begin
+            let i =
+            begin match munop with
+            | Maddi(n) -> addq (imm32 n) (operand r)
+            | Msetei(n) -> raise (Error "TODO")
+            | Msetnei(n) -> raise (Error "TODO")
+            end in
+            emit l i; lin g label
+        end
     | Ltltree.Embinop(mbinop, r1, r2, label) ->
-        let o1 = operand r1 in
-        let o2 = operand r2 in
-        let i =
-        begin match mbinop with
-		| Mmov -> movq o1 o2
-		| Madd -> addq o1 o2
-		| Msub -> subq o1 o2
-		| Mmul -> imulq o1 o2
-		| Mdiv -> raise (Error "TODO")
-		| Msete -> raise (Error "TODO")
-		| Msetne -> raise (Error "TODO")
-		| Msetl -> raise (Error "TODO")
-		| Msetle -> raise (Error "TODO")
-		| Msetg -> raise (Error "TODO")
-		| Msetge -> raise (Error "TODO")
-        end in
-        emit l i; lin g label
-    | Ltltree.Emubranch(mubranch, r, l1, l2) ->
-        begin match mubranch with
-        | Mjz ->
-            begin
-                emit l (jz (convert_label l1))
+        begin
+            let o1 = operand r1 in
+            let o2 = operand r2 in
+            begin match mbinop with
+            | Mmov -> emit l (movq o1 o2)
+            | Madd -> emit l (addq o1 o2)
+            | Msub -> emit l (subq o1 o2)
+            | Mmul -> emit l (imulq o1 o2)
+            | Mdiv -> raise (Error "TODO")
+            | Msete | Msetne | Msetl | Msetle | Msetg | Msetge ->
+                begin 
+                emit l (cmpq o1 o2);
+                let b = operand_b r2 in
+                match mbinop with
+                | Msete -> emit_wl (sete  b)
+                | Msetne -> emit_wl (setne b)
+                | Msetl -> emit_wl (setl b)
+                | Msetle -> emit_wl (setle b)
+                | Msetg -> emit_wl (setg b)
+                | Msetge -> emit_wl (setge b)
+                | _ -> raise (Error "IMPOSSIBLE")
+                end
             end
-		| Mjnz -> raise (Error "TODO")
-		| Mjlei(n) -> raise (Error "TODO")
-		| Mjgi(n) -> raise (Error "TODO")
-        ;
-        let l2 = Label.fresh () in
-        emit l2 (jmp (convert_label l2));
-        lin g l2; lin g l1;
-        raise (Error "TODO")
-		end
-    | Ltltree.Embbranch(mbbranch, o1, o2, l1, l2) ->
-		begin
-        match mbbranch with
-        | Mjl -> emit l (jl (convert_label l1))
-		| Mjle -> emit l (jle (convert_label l1))
-        ;
-        let l2 = Label.fresh () in
-        emit l2 (jmp (convert_label l2));
-        lin g l2; lin g l1
+            ;
+            lin g label
+        end
+    | Ltltree.Emubranch(mubranch, r, l1, l2) ->
+        begin
+            begin
+            emit l (testq (operand r) (operand r));
+            let lab = convert_label l1 in
+            need_label l1;
+            match mubranch with
+            | Mjz -> emit_wl (jz lab);
+            | Mjnz -> emit_wl (jnz lab);
+            | Mjlei(n) -> raise (Error "TODO");
+            | Mjgi(n) -> raise (Error "TODO");
+            ;
+            emit_wl (jmp (convert_label l2));
+            lin g l2; lin g l1
+            end
+        end
+    | Ltltree.Embbranch(mbbranch, r1, r2, l1, l2) ->
+        begin
+            begin
+            emit l (cmpq (operand r1) (operand r2));
+            need_label l1;
+            match mbbranch with
+            | Mjl -> emit_wl (jl (convert_label l1))
+            | Mjle -> emit_wl (jle (convert_label l1))
+            ;
+            emit_wl (jmp (convert_label l2));
+            lin g l2; lin g l1
+            end
         end
     | Ltltree.Epush(r, label) ->
-        emit l (pushq (operand r)); lin g label
+        begin
+            emit l (pushq (operand r)); lin g label
+        end
     | Ltltree.Ecall(ident, label) ->
-        emit l (call ident); lin g label
+        begin
+            emit l (call ident); lin g label
+        end
     | Ltltree.Epop(r, label) ->
-        emit l (popq (register r)); lin g label
+        begin
+            emit l (popq (register r)); lin g label
+        end
 
 let program (f: Ltltree.file) =
     let aux (deffun: Ltltree.deffun) =
@@ -124,15 +183,16 @@ let program (f: Ltltree.file) =
         lin (deffun.fun_body) (deffun.fun_entry)
     in
     List.iter aux (f.funs);
+    code := List.rev !code;
     let text = ref (globl "main") in
     let treat_code = function
-    | Code(c) -> text := c ++ (!text)
+    | Code(c) -> text := (!text) ++ c
     | Label(l) ->
-        if Hashtbl.mem labels l then text := (label (convert_label l)) ++ (!text)
+        if Hashtbl.mem labels l then text := (!text) ++ (label (convert_label l))
     in
     List.iter treat_code (!code);
     let p = {
         text = !text;
         data = nop;
     } in
-    print_program std_formatter p
+    print_in_file "hello.s" p
