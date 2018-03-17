@@ -5,10 +5,11 @@ open Ltltree
 exception Error of string
 
 let visited = Hashtbl.create 17
-type instr = Code of X86_64.text | Label of Label.t
+type instr = Code of X86_64.text | Label of Label.t | Goto of Label.t * X86_64.text
 let code = ref []
 let emit l i = code := Code i :: Label l :: !code
 let emit_wl i = code := Code i :: !code
+let emit_goto x = code := x :: !code
 let labels = Hashtbl.create 17
 let need_label l = Hashtbl.add labels l ()
 
@@ -72,7 +73,6 @@ let rec lin g l =
   end
 
 and instr g l i =
-    print_string (convert_label l);
     match i with
     | Ltltree.Econst (n, r, l1) ->
         begin emit l (movq (imm32 n) (operand r)); lin g l1 end
@@ -87,15 +87,12 @@ and instr g l i =
             lin g label
         end
     | Ltltree.Egoto(label) ->
-        (*
         begin
-            if Hashtbl.mem visited l then emit l (jmp (convert_label label))
-            else lin g label
-        end
-        *)
-        begin
-            emit l (jmp (convert_label label));
-            lin g label
+            if Hashtbl.mem visited label then
+                emit_goto (Goto(l, (jmp (convert_label label))))
+            else
+                emit_goto (Label(l));
+                lin g label
         end
     | Ltltree.Ereturn -> emit l ret
     | Ltltree.Emunop(munop, r, label) ->
@@ -141,6 +138,7 @@ and instr g l i =
             emit l (testq (operand r) (operand r));
             let lab = convert_label l1 in
             need_label l1;
+            need_label l2;
             match mubranch with
             | Mjz -> emit_wl (jz lab);
             | Mjnz -> emit_wl (jnz lab);
@@ -156,6 +154,7 @@ and instr g l i =
             begin
             emit l (cmpq (operand r1) (operand r2));
             need_label l1;
+            need_label l2;
             match mbbranch with
             | Mjl -> emit_wl (jl (convert_label l1))
             | Mjle -> emit_wl (jle (convert_label l1))
@@ -189,10 +188,14 @@ let program (f: Ltltree.file) =
     | Code(c) -> text := (!text) ++ c
     | Label(l) ->
         if Hashtbl.mem labels l then text := (!text) ++ (label (convert_label l))
+    | Goto(l, c) ->
+        if Hashtbl.mem labels l then
+            text := (!text) ++ (label (convert_label l)) ++ c
     in
     List.iter treat_code (!code);
     let p = {
         text = !text;
         data = nop;
     } in
+    print_program std_formatter p;
     print_in_file "hello.s" p
