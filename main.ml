@@ -71,7 +71,7 @@ let () =
     if debug then
         Ltltree.print_file std_formatter p;
     if !interp_ltl then begin ignore (Ltlinterp.program p); exit 0 end;
-    Linearisation.program p;
+    X86_64.print_in_file ((Filename.chop_suffix !ifile ".s") ^ ".s") (Linearisation.program p);
   with
     | Lexer.Lexical_error c ->
 	localisation (Lexing.lexeme_start_p buf);

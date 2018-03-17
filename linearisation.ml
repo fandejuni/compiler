@@ -5,11 +5,11 @@ open Ltltree
 exception Error of string
 
 let visited = Hashtbl.create 17
-type instr = Code of X86_64.text | Label of Label.t | Goto of Label.t * X86_64.text
+type instr = Code of X86_64.text | Label of Label.t
 let code = ref []
 let emit l i = code := Code i :: Label l :: !code
 let emit_wl i = code := Code i :: !code
-let emit_goto x = code := x :: !code
+let emit_full x = code := x :: !code
 let labels = Hashtbl.create 17
 let need_label l = Hashtbl.add labels l ()
 
@@ -89,21 +89,29 @@ and instr g l i =
     | Ltltree.Egoto(label) ->
         begin
             if Hashtbl.mem visited label then
-                emit_goto (Goto(l, (jmp (convert_label label))))
+                emit_wl (jmp (convert_label label))
             else
-                emit_goto (Label(l));
+                emit_full (Label(l));
                 lin g label
         end
     | Ltltree.Ereturn -> emit l ret
     | Ltltree.Emunop(munop, r, label) ->
         begin
-            let i =
             begin match munop with
-            | Maddi(n) -> addq (imm32 n) (operand r)
-            | Msetei(n) -> raise (Error "TODO")
-            | Msetnei(n) -> raise (Error "TODO")
-            end in
-            emit l i; lin g label
+            | Maddi(n) -> emit l (addq (imm32 n) (operand r))
+            | Msetei(n) ->
+                begin
+                    emit l (cmpq (imm32 n) (operand r));
+                    emit_wl (sete (operand_b r))
+                end
+            | Msetnei(n) ->
+                begin
+                    emit l (cmpq (imm32 n) (operand r));
+                    emit_wl (setne (operand_b r))
+                end
+            end
+            ;
+            lin g label
         end
     | Ltltree.Embinop(mbinop, r1, r2, label) ->
         begin
@@ -114,7 +122,7 @@ and instr g l i =
             | Madd -> emit l (addq o1 o2)
             | Msub -> emit l (subq o1 o2)
             | Mmul -> emit l (imulq o1 o2)
-            | Mdiv -> raise (Error "TODO")
+            | Mdiv -> emit l (idivq o2)
             | Msete | Msetne | Msetl | Msetle | Msetg | Msetge ->
                 begin 
                 emit l (cmpq o1 o2);
@@ -135,15 +143,30 @@ and instr g l i =
     | Ltltree.Emubranch(mubranch, r, l1, l2) ->
         begin
             begin
-            emit l (testq (operand r) (operand r));
             let lab = convert_label l1 in
             need_label l1;
             need_label l2;
             match mubranch with
-            | Mjz -> emit_wl (jz lab);
-            | Mjnz -> emit_wl (jnz lab);
-            | Mjlei(n) -> raise (Error "TODO");
-            | Mjgi(n) -> raise (Error "TODO");
+            | Mjz ->
+                begin
+                    emit l (testq (operand r) (operand r));
+                    emit_wl (jz lab);
+                end
+            | Mjnz ->
+                begin
+                    emit l (testq (operand r) (operand r));
+                    emit_wl (jnz lab);
+                end
+            | Mjlei(n) -> 
+                begin
+                    emit l (testq (imm32 n) (operand r));
+                    emit_wl (jle lab);
+                end
+            | Mjgi(n) -> 
+                begin
+                    emit l (testq (imm32 n) (operand r));
+                    emit_wl (jg lab);
+                end
             ;
             emit_wl (jmp (convert_label l2));
             lin g l2; lin g l1
@@ -188,14 +211,9 @@ let program (f: Ltltree.file) =
     | Code(c) -> text := (!text) ++ c
     | Label(l) ->
         if Hashtbl.mem labels l then text := (!text) ++ (label (convert_label l))
-    | Goto(l, c) ->
-        if Hashtbl.mem labels l then
-            text := (!text) ++ (label (convert_label l)) ++ c
     in
     List.iter treat_code (!code);
-    let p = {
+    {
         text = !text;
         data = nop;
-    } in
-    print_program std_formatter p;
-    print_in_file "hello.s" p
+    }
