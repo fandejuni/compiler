@@ -1,4 +1,5 @@
 open Ertltree
+open Format
 
 exception Error of string
 exception Remaining_args of register list
@@ -67,8 +68,15 @@ let instr = function
   | Rtltree.Emunop(m, r, l) -> Emunop(m, r, l)
   | Rtltree.Embinop(Mdiv, r1, r2, l) ->
           let (l3, _) = couple (Embinop(Mmov, Register.rax, r2, l)) in
-          let (l2, _) = couple (Embinop(Mdiv, r1, Register.rax, l3)) in
-          Embinop(Mmov, r2, Register.rax, l2)
+          let (l2, _) = couple (Embinop(Mdiv, r1, Register.rax , l3)) in
+          
+          let (lpos, _) = couple (Econst(Int32.zero, Register.rdx , l2)) in
+          
+          let (lneg, _) = couple (Econst(Int32.of_int(-1), Register.rdx , l2)) 
+          
+          in
+          let (l1, _) = couple (Emubranch(Mjgi(Int32.zero), Register.rdx ,lneg,lpos)) in
+          Embinop(Mmov, r2, Register.rax, l1)
   | Rtltree.Embinop(m, r1, r2, l) -> Embinop(m, r1, r2, l)
   | Rtltree.Emubranch(mu, r, l1, l2) -> Emubranch(mu, r, l1, l2)
   | Rtltree.Embbranch(mb, r1, r2, l1, l2) -> Embbranch(mb, r1, r2, l1, l2)

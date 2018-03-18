@@ -127,10 +127,11 @@ and instr g l i =
             | Madd -> emit l (addq o1 o2)
             | Msub -> emit l (subq o1 o2)
             | Mmul -> emit l (imulq o1 o2)
-            | Mdiv -> emit l (idivq o2)
+            | Mdiv -> emit l (idivq o1)
             | Msete | Msetne | Msetl | Msetle | Msetg | Msetge ->
             begin 
                 emit l (cmpq o1 o2);
+                emit_wl (movq (imm32 (Int32.zero)) (operand r2));
                 let b = operand_b r2 in
                     begin
                         match mbinop with
@@ -138,11 +139,11 @@ and instr g l i =
                         | Msetne -> emit_wl (setne b)
                         | Msetl -> emit_wl (setl b)
                         | Msetle -> emit_wl (setle b)
-                        | Msetg -> emit_wl (setg b)
+                        | Msetg -> emit_wl (setg b) 
                         | Msetge -> emit_wl (setge b)
                         | _ -> raise (Error "IMPOSSIBLE")
                     end
-                end
+                end 
             end
             ;
             lin g label
@@ -162,7 +163,7 @@ and instr g l i =
                 | Mjnz ->
                     begin
                         emit l (testq (operand r) (operand r));
-                        emit_wl (jnz lab);
+                        emit_wl (jz lab);
                     end
                 | Mjlei(n) -> 
                     begin

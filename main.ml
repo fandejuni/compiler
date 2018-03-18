@@ -51,6 +51,7 @@ let () =
     Arg.usage options usage;
     exit 1
   end;
+  
   let debug = !debug in
   let f = open_in !ifile in
   let buf = Lexing.from_channel f in

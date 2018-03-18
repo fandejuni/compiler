@@ -309,12 +309,19 @@ let convert_ltl (coloring, i) deffun =
             let l2 = generate (Estore(r1, Register.tmp1, n, l)) in
             Eload(Register.rbp, n2, Register.tmp1, l2)
         | (Spilled(n1), Reg(r2)) ->
-            let l2 = generate (Estore(Register.tmp1, r2, n, l)) in
-            Eload(Register.rbp, n1, Register.tmp1, l2)
+            let l2 = generate (Estore(Register.tmp2, r2, n, l)) in
+            Eload(Register.rbp, n1, Register.tmp2, l2)
         | (Spilled(n1), Spilled(n2)) ->
             let l3 = generate (Estore(Register.tmp1, Register.tmp2, n, l)) in
             let l2 = generate (Eload(Register.rbp, n1, Register.tmp1, l3)) in
             Eload(Register.rbp, n2, Register.tmp2, l2)
+    in
+    let mov o1 o2 l =
+        match (o1,o2) with 
+        |(Spilled(i), Spilled(j)) -> 
+        let l2 = generate (Estore(Register.tmp2, Register.rbp, j, l)) in
+        Eload(Register.rbp, i, Register.tmp2, l2)  (* !! Ce cas fait bugger le ltl mais est necessaire au x86*)
+        |_ -> Embinop(Mmov, o1, o2, l)
     in
     let aux l instr = 
         let i = match instr with
@@ -323,6 +330,7 @@ let convert_ltl (coloring, i) deffun =
         | Ertltree.Estore(r1, r2, i, label) -> store (get r1) i (get r2) label
         | Ertltree.Emunop(munop, register, label) -> Emunop(munop, get register, label)
         | Ertltree.Embinop(Mmov, r1, r2, label) when (get r1) = (get r2) -> Egoto(label)
+        | Ertltree.Embinop(Mmov, r1, r2, label) -> mov (get r1) (get r2) label
         | Ertltree.Embinop(mbinop, r1, r2, label) -> Embinop(mbinop, get r1, get r2, label)
         | Ertltree.Emubranch(mubranch, register, l1, l2) -> Emubranch(mubranch, get register, l1, l2)
         | Ertltree.Embbranch(mbbranch, r1, r2, l1, l2) -> Embbranch(mbbranch, get r1, get r2, l1, l2)
@@ -334,10 +342,11 @@ let convert_ltl (coloring, i) deffun =
             Epush(Reg(Register.rbp), l2)
         | Ertltree.Edelete_frame(label) ->
             let l2 = generate (Epop(Register.rbp, label)) in
+
             Embinop(Mmov, Reg(Register.rbp), Reg(Register.rsp), l2)
         | Ertltree.Eget_param(i, register, label) ->
-            Embinop(Mmov, Spilled(i), get register, label)
-                (* load (i) (Reg(Register.rbp)) (get register) label *)
+            (*Embinop(Mmov, Spilled(i), get register, label)*) 
+                 load i (Reg(Register.rbp)) (get register) label 
         | Ertltree.Epush_param(register, label) -> Epush(get register, label)
         | Ertltree.Ereturn -> Ereturn
         in
