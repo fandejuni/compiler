@@ -72,10 +72,9 @@ let instr = function
           
           let (lpos, _) = couple (Econst(Int32.zero, Register.rdx , l2)) in
           
-          let (lneg, _) = couple (Econst(Int32.of_int(-1), Register.rdx , l2)) 
+          let (lneg, _) = couple (Econst(Int32.of_int(-1), Register.rdx , l2)) in
           
-          in
-          let (l1, _) = couple (Emubranch(Mjgi(Int32.zero), Register.rdx ,lneg,lpos)) in
+          let (l1, _) = couple (Emubranch(Mjlei(Int32.zero), Register.rax ,lneg,lpos)) in
           Embinop(Mmov, r2, Register.rax, l1)
   | Rtltree.Embinop(m, r1, r2, l) -> Embinop(m, r1, r2, l)
   | Rtltree.Emubranch(mu, r, l1, l2) -> Emubranch(mu, r, l1, l2)

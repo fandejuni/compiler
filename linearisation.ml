@@ -146,7 +146,7 @@ and instr g l i =
                 end 
             end
             ;
-            lin g label
+            lin g label 
         end
     | Ltltree.Emubranch(mubranch, r, l1, l2) ->
         begin
@@ -167,12 +167,12 @@ and instr g l i =
                     end
                 | Mjlei(n) -> 
                     begin
-                        emit l (testq (imm32 n) (operand r));
-                        emit_wl (jle lab);
+                        emit l (cmpq (imm32 n) (operand r));
+                        emit_wl (jl lab); (*change car gi et lei etaient redondants : ne correspond pas au nom du coup*)
                     end
                 | Mjgi(n) -> 
                     begin
-                        emit l (testq (imm32 n) (operand r));
+                        emit l (cmpq (imm32 n) (operand r));
                         emit_wl (jg lab);
                     end
             end
