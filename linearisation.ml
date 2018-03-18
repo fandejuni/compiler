@@ -89,10 +89,15 @@ and instr g l i =
     | Ltltree.Egoto(label) ->
         begin
             if Hashtbl.mem visited label then
-                emit_wl (jmp (convert_label label))
+                begin
+                    emit l (jmp (convert_label label));
+                    need_label label
+                end
             else
-                emit_full (Label(l));
-                lin g label
+                begin
+                    emit_full (Label(l));
+                    lin g label
+                end
         end
     | Ltltree.Ereturn -> emit l ret
     | Ltltree.Emunop(munop, r, label) ->
@@ -124,17 +129,19 @@ and instr g l i =
             | Mmul -> emit l (imulq o1 o2)
             | Mdiv -> emit l (idivq o2)
             | Msete | Msetne | Msetl | Msetle | Msetg | Msetge ->
-                begin 
+            begin 
                 emit l (cmpq o1 o2);
                 let b = operand_b r2 in
-                match mbinop with
-                | Msete -> emit_wl (sete  b)
-                | Msetne -> emit_wl (setne b)
-                | Msetl -> emit_wl (setl b)
-                | Msetle -> emit_wl (setle b)
-                | Msetg -> emit_wl (setg b)
-                | Msetge -> emit_wl (setge b)
-                | _ -> raise (Error "IMPOSSIBLE")
+                    begin
+                        match mbinop with
+                        | Msete -> emit_wl (sete  b)
+                        | Msetne -> emit_wl (setne b)
+                        | Msetl -> emit_wl (setl b)
+                        | Msetle -> emit_wl (setle b)
+                        | Msetg -> emit_wl (setg b)
+                        | Msetge -> emit_wl (setge b)
+                        | _ -> raise (Error "IMPOSSIBLE")
+                    end
                 end
             end
             ;
@@ -142,35 +149,36 @@ and instr g l i =
         end
     | Ltltree.Emubranch(mubranch, r, l1, l2) ->
         begin
-            begin
             let lab = convert_label l1 in
             need_label l1;
             need_label l2;
-            match mubranch with
-            | Mjz ->
-                begin
-                    emit l (testq (operand r) (operand r));
-                    emit_wl (jz lab);
-                end
-            | Mjnz ->
-                begin
-                    emit l (testq (operand r) (operand r));
-                    emit_wl (jnz lab);
-                end
-            | Mjlei(n) -> 
-                begin
-                    emit l (testq (imm32 n) (operand r));
-                    emit_wl (jle lab);
-                end
-            | Mjgi(n) -> 
-                begin
-                    emit l (testq (imm32 n) (operand r));
-                    emit_wl (jg lab);
-                end
+            begin
+                match mubranch with
+                | Mjz ->
+                    begin
+                        emit l (testq (operand r) (operand r));
+                        emit_wl (jz lab);
+                    end
+                | Mjnz ->
+                    begin
+                        emit l (testq (operand r) (operand r));
+                        emit_wl (jnz lab);
+                    end
+                | Mjlei(n) -> 
+                    begin
+                        emit l (testq (imm32 n) (operand r));
+                        emit_wl (jle lab);
+                    end
+                | Mjgi(n) -> 
+                    begin
+                        emit l (testq (imm32 n) (operand r));
+                        emit_wl (jg lab);
+                    end
+            end
             ;
             emit_wl (jmp (convert_label l2));
-            lin g l2; lin g l1
-            end
+            lin g l2;
+            lin g l1
         end
     | Ltltree.Embbranch(mbbranch, r1, r2, l1, l2) ->
         begin
@@ -178,9 +186,11 @@ and instr g l i =
             emit l (cmpq (operand r1) (operand r2));
             need_label l1;
             need_label l2;
-            match mbbranch with
-            | Mjl -> emit_wl (jl (convert_label l1))
-            | Mjle -> emit_wl (jle (convert_label l1))
+            begin
+                match mbbranch with
+                | Mjl -> emit_wl (jl (convert_label l1))
+                | Mjle -> emit_wl (jle (convert_label l1))
+            end
             ;
             emit_wl (jmp (convert_label l2));
             lin g l2; lin g l1
